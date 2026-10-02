@@ -1,8 +1,11 @@
 # Instalar la base de datos de Ruta Vocacional
 
 La aplicación completa requiere un alojamiento con Node.js 24 y MySQL 8.
-En este repositorio, despliega la rama `pruebas/hostinger-mysql-20261001`;
-`main` corresponde a la vista de pruebas de Vercel y no sustituye este backend.
+Para Hostinger usa el repositorio `rutavocacional360/rutavocacional360`, rama
+`main`: contiene esta aplicación completa con backend MySQL.
+En el repositorio anterior `asopanasguasaganda-dev/ruta-vocacional`, la versión
+completa está en `pruebas/hostinger-mysql-20261001`; su rama `main` es la vista
+de pruebas de Vercel y no sustituye este backend.
 El archivo `mysql.sql` contiene las 21 tablas de la aplicación, sin alumnos,
 contraseñas ni cuentas de demostración. No es un respaldo de los datos locales.
 Las etapas educativas y las preferencias se guardan en documentos del perfil;
