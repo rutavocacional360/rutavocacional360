@@ -1,4 +1,4 @@
-import { settingsProblem } from "@/lib/validation";
+import { settingsProblem, emailProblem, textProblem } from "@/lib/validation";
 import { AuditLog } from "./Publication";
 import { flush } from "../../lib/session";
 import { useState } from "react";
@@ -58,6 +58,7 @@ export function Settings() {
             />
             <Field
               label="Nombre"
+              maxLength={191} validate={v=>textProblem(v,191,true)} required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
@@ -65,11 +66,13 @@ export function Settings() {
             <Field
               label="Correo de orientación"
               type="email"
+              maxLength={254} validate={emailProblem} required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
             <Field
               label="Periodo académico"
+              maxLength={11} placeholder="2026–2027" required
               value={form.year}
               onChange={(e) => setForm({ ...form, year: e.target.value })}
             />

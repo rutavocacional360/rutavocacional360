@@ -1,7 +1,9 @@
 import {StyledSelect} from './StyledSelect';
+import {filterNameInput} from '@/lib/validation';
 import { useId, useState, useEffect, useRef } from "react";
 import type {
   ButtonHTMLAttributes,
+  ChangeEvent,
   HTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
@@ -124,16 +126,32 @@ export function Field({
   icon,
   trailingAction,
   validate,
+  personName = false,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & FieldMeta & {icon?:ReactNode; trailingAction?:ReactNode}) {
+}: InputHTMLAttributes<HTMLInputElement> & FieldMeta & {icon?:ReactNode; trailingAction?:ReactNode; personName?:boolean}) {
   const auto = useId();
   const key = id || auto;
   const inputRef = useRef<HTMLInputElement>(null);
   const [touched, setTouched] = useState(false);
+  const composing = useRef(false);
+  const [inputNotice, setInputNotice] = useState('');
+  function change(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    if (personName && !composing.current) {
+      const raw = input.value, clean = filterNameInput(raw);
+      const cursor = filterNameInput(raw.slice(0, input.selectionStart ?? raw.length)).length;
+      setInputNotice(raw === clean ? '' : 'Se omitieron números o símbolos. Revisa tu nombre.');
+      if (raw !== clean) {
+        input.value = clean;
+        input.setSelectionRange(cursor, cursor);
+      }
+    }
+    props.onChange?.(event);
+  }
   const problem = validate?.(props.value ?? '') || '';
   useEffect(() => { inputRef.current?.setCustomValidity(problem); }, [problem]);
   const visibleError = error || (touched ? problem : '');
-  const desc = visibleError || hint;
+  const desc = visibleError || inputNotice || hint;
   return (
     <div className={"field " + className}>
       <label htmlFor={key}>{label}</label>
@@ -143,6 +161,10 @@ export function Field({
         aria-invalid={!!visibleError}
         aria-describedby={desc ? key + "-hint" : undefined}
         {...props}
+        onChange={event => { if (!personName) change(event); }}
+        onInput={event => { if (personName) change(event as unknown as ChangeEvent<HTMLInputElement>); props.onInput?.(event); }}
+        onCompositionStart={event => { composing.current = true; props.onCompositionStart?.(event); }}
+        onCompositionEnd={event => { composing.current = false; if (personName) change(event as unknown as ChangeEvent<HTMLInputElement>); props.onCompositionEnd?.(event); }}
         onBlur={event => { setTouched(true); props.onBlur?.(event); }}
         onInvalid={event => { setTouched(true); props.onInvalid?.(event); }}
       />{trailingAction}</div>

@@ -1,4 +1,5 @@
 import { flush,refreshSession } from "../../lib/session";
+import {nameProblem,emailProblem,textProblem} from '@/lib/validation';
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Download, Plus, ChevronLeft, ChevronRight } from "lucide-react";
@@ -33,10 +34,9 @@ export function UserForm({
     e.preventDefault();
     if (busy) return;
     const errors: Record<string, string> = {};
-    if (form.name.trim().length < 3) errors.name = "Escribe nombre y apellido.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
-      errors.email = "Escribe un correo válido.";
-    if (!form.group.trim()) errors.group = "Escribe el nombre del grupo.";
+    if (nameProblem(form.name)) errors.name = nameProblem(form.name);
+    if (emailProblem(form.email)) errors.email = emailProblem(form.email);
+    if (textProblem(form.group,100,true)) errors.group = 'Escribe un grupo de hasta 100 caracteres.';
     setErrors(errors);
     if (!Object.keys(errors).length) {
       setBusy(true);
@@ -55,6 +55,7 @@ export function UserForm({
       </Notice>
       <Field
         label="Nombre y apellido"
+        personName validate={nameProblem} maxLength={140} required
         value={form.name}
         onChange={(e) => setForm({ ...form, name: e.target.value })}
         error={errors.name}
@@ -62,6 +63,7 @@ export function UserForm({
       <Field
         label="Correo electrónico"
         type="email"
+        validate={emailProblem} maxLength={254} required
         readOnly={existing}
         hint={existing ? "El correo identifica la cuenta." : undefined}
         value={form.email}
@@ -93,6 +95,7 @@ export function UserForm({
       </div>
       <Field
         label="Grupo"
+        maxLength={100} validate={v=>textProblem(v,100,true)} required
         value={form.group}
         onChange={(e) => setForm({ ...form, group: e.target.value })}
         error={errors.group}

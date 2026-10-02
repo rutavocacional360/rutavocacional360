@@ -1,11 +1,13 @@
 // Shared client/server rules. Passwords are never trimmed or normalized.
 export const normalizeName = (value: string) => value.normalize('NFC').trim().replace(/ +/g, ' ');
+// Editing rule: allow partial names while typing; full validation still runs on save.
+export const filterNameInput = (value: string) => value.normalize('NFC').replace(/\s/g, ' ').replace(/[^\p{L}\p{M} '\u2019.\-]/gu, '');
 export function nameProblem(value: unknown, max = 140): string {
   if (typeof value !== 'string') return 'Escribe un nombre válido.';
   const name = normalizeName(value);
   if (name.length < 2 || name.length > max) return `Usa entre 2 y ${max} caracteres.`;
-  if (!/^[\p{L}\p{M}]+(?:[ '\u2019.\-][\p{L}\p{M}]+)*\.?$/u.test(name))
-    return 'Usa letras, espacios, apóstrofes o guiones; no números ni otros símbolos.';
+  if (!/^\p{L}[\p{L}\p{M}]*(?:['\u2019.\-]\p{L}[\p{L}\p{M}]*)*\.?(?: +\p{L}[\p{L}\p{M}]*(?:['\u2019.\-]\p{L}[\p{L}\p{M}]*)*\.?)*$/u.test(name))
+    return 'Usa solo letras, espacios, apóstrofes o guiones.';
   return '';
 }
 export function emailProblem(value: unknown): string {
@@ -31,11 +33,11 @@ export function settingsProblem(value: unknown): string {
   const data = value as Record<string, unknown>;
   if (textProblem(data.name, 191, true)) return 'Revisa el nombre de la plataforma (máximo 191 caracteres).';
   if (emailProblem(data.email)) return 'Revisa el correo de orientación.';
-  if (typeof data.year !== 'string' || !/^\d{4}\s*[-–]\s*\d{4}$/.test(data.year)) return 'Escribe el periodo como 2026–2027.';
+  if (typeof data.year !== 'string' || data.year.length > 11 || !/^\d{4}\s*[-–]\s*\d{4}$/.test(data.year)) return 'Escribe el periodo como 2026–2027.';
   const years = data.year.split(/[-–]/).map(Number);
   if (years[0] < 2000 || years[1] !== years[0] + 1) return 'El periodo debe abarcar dos años consecutivos.';
-  if (!['America/Guayaquil', 'Pacific/Galapagos'].includes(String(data.timezone))) return 'Selecciona una zona horaria válida.';
-  if (!['yes', 'no'].includes(String(data.selfRegistration)) || !['yes', 'no'].includes(String(data.reviewRequired))) return 'Revisa las preferencias de la plataforma.';
+  if (typeof data.timezone !== 'string' || !['America/Guayaquil', 'Pacific/Galapagos'].includes(data.timezone)) return 'Selecciona una zona horaria válida.';
+  if (typeof data.selfRegistration !== 'string' || typeof data.reviewRequired !== 'string' || !['yes', 'no'].includes(data.selfRegistration) || !['yes', 'no'].includes(data.reviewRequired)) return 'Revisa las preferencias de la plataforma.';
   return '';
 }
 export function studentDocumentProblem(key: string, value: unknown): string {

@@ -57,12 +57,12 @@ export function AuthForm({mode,onSubmit,onNavigate}:{mode:AuthMode;onSubmit:(pay
     {register&&<Stepper labels={['Tu cuenta','Tu perfil','Comenzar']} current={step}/>}
     {error&&<div ref={errorRef} tabIndex={-1} className="auth-error"><Notice tone="danger">{error}</Notice></div>}
     {register&&step===0&&<div className="auth-name-fields">
-      <Field icon={<UserRound size={18}/>} label="Nombres" maxLength={60} validate={v=>nameProblem(v,60)} value={name} onChange={e=>setName(e.target.value)} autoComplete="given-name" error={errors.name} required/>
-      <Field icon={<UserRound size={18}/>} label="Apellidos" maxLength={79} validate={v=>nameProblem(v,79)} value={surname} onChange={e=>setSurname(e.target.value)} autoComplete="family-name" error={errors.surname} required/>
+      <Field icon={<UserRound size={18}/>} label="Nombres" maxLength={60} personName validate={v=>nameProblem(v,60)} value={name} onChange={e=>{setName(e.target.value);setErrors(prev=>({...prev,name:''}));}} autoComplete="given-name" error={errors.name} required/>
+      <Field icon={<UserRound size={18}/>} label="Apellidos" maxLength={79} personName validate={v=>nameProblem(v,79)} value={surname} onChange={e=>{setSurname(e.target.value);setErrors(prev=>({...prev,surname:''}));}} autoComplete="family-name" error={errors.surname} required/>
     </div>}
     {(!register||step===0)&&<>
-      <Field icon={<Mail size={18}/>} label={'Correo electrónico'} type="email" maxLength={254} validate={emailProblem} inputMode="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="nombre@correo.com" error={errors.email} required/>
-      {mode!=='reset'&&<div><PasswordField label="Contraseña" value={password} onChange={setPassword} error={errors.password} autoComplete={register?'new-password':'current-password'}/>{register&&<p className="auth-field-hint">Usa al menos 15 caracteres.</p>}</div>}
+      <Field icon={<Mail size={18}/>} label={'Correo electrónico'} type="email" maxLength={254} validate={emailProblem} inputMode="email" value={email} onChange={e=>{setEmail(e.target.value);setErrors(prev=>({...prev,email:''}));}} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="nombre@correo.com" error={errors.email} required/>
+      {mode!=='reset'&&<div><PasswordField label="Contraseña" value={password} onChange={value=>{setPassword(value);setErrors(prev=>({...prev,password:''}));}} error={errors.password} autoComplete={register?'new-password':'current-password'}/>{register&&<p className="auth-field-hint">Usa al menos 15 caracteres.</p>}</div>}
     </>}
     {register&&step===1&&<>
       <SelectField label="¿En qué etapa estás?" value={stage} onChange={e=>setStage(e.target.value)} error={errors.stage} required><option value="">Selecciona una opción</option>{educationStages.map(stage=><option key={stage}>{stage}</option>)}</SelectField>

@@ -3,6 +3,7 @@ import {spawnSync} from 'node:child_process';
 // No production database, mailbox or AI API is contacted by this suite.
 const tests = [
   'test-validation.mjs',
+  'test-name-input.mjs',
   'test-security-boundaries.mjs', 'test-production-config.mjs', 'test-database-config.mjs',
   'test-deployment.cjs', 'test-deployment-readiness.mjs',
   'test-mail-config.mjs', 'test-account-mail.mjs',
