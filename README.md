@@ -1,5 +1,11 @@
 ﻿# Ruta Vocacional 360° — proyecto para Hostinger
 
+Repositorio de despliegue: [rutavocacional360/rutavocacional360](https://github.com/rutavocacional360/rutavocacional360),
+rama `main`. En Hostinger selecciona Node.js 24, compilación `npm run build`
+e inicio `npm start`, con las variables privadas del servidor configuradas.
+El dominio elegido para la instalación es `rutavocacional360.com`;
+configura `APP_URL=https://rutavocacional360.com` cuando esté conectado con HTTPS.
+
 Este repositorio ejecuta una única aplicación Next.js con backend y MySQL. Las cuentas,
 sesiones, respuestas, resultados, simuladores e indicadores se consultan en el servidor.
 Se retiraron el modo de cuentas del navegador y la publicación estática de Vercel.
