@@ -34,3 +34,10 @@
 .field-visibility-toggle:hover { color:var(--primary); background:rgba(112,86,211,.08); }
 .field-visibility-toggle:focus-visible { outline:2px solid var(--primary); outline-offset:-3px; }
 .field-visibility-toggle:disabled { opacity:.5; cursor:default; }
+.toast--danger { border:1px solid #f5a6b4; }
+.toast--danger > svg { color:#ffb4c0; }
+.toast > svg { flex-shrink:0; }
+.toast span { overflow-wrap:anywhere; }
+.toast button { display:grid; place-items:center; flex-shrink:0; min-width:44px; min-height:44px; border:0; border-radius:8px; background:transparent; cursor:pointer; }
+.toast button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.notice > svg { flex-shrink:0; margin-top:2px; }

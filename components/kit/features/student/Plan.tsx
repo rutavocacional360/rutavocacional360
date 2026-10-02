@@ -70,7 +70,7 @@ export function Plan() {
       prev.includes(String(active)) ? prev : [...prev, String(active)],
     );
     await flush(); toast("Reflexión guardada y estación completada");
-    if (active < stations.length - 1) setActive(active + 1); } catch(e) { toast((e as Error).message); }
+    if (active < stations.length - 1) setActive(active + 1); } catch(e) { toast((e as Error).message, 'danger'); }
   }
   return (
     <>

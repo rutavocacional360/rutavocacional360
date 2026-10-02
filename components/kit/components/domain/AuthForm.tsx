@@ -3,18 +3,13 @@ import { educationStages } from '../../data/baccalaureate';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Eye, EyeOff, ArrowRight, CheckCircle2, Mail, LockKeyhole, UserRound, LogIn } from 'lucide-react';
-import { Button, Checkbox, Field, Notice, SelectField, Stepper } from '../ui/primitives';
+import { Button, Checkbox, Field, PasswordInput, Notice, SelectField, Stepper } from '../ui/primitives';
 import {SchoolFields,emptyEducation,type EducationData} from './EducationFields';
 export type AuthMode = 'login' | 'register' | 'reset' | 'admin';
 export interface AuthPayload extends Partial<EducationData> { email: string; password?: string; name?: string; stage?: string; institution?: string; firstName?: string; lastName?: string }
 
 export function PasswordField({label,value,onChange,error,autoComplete='current-password'}:{label:string;value:string;onChange:(v:string)=>void;error?:string;autoComplete?:string}) {
-  const [visible,setVisible]=useState(false);
-  const id=useId();
-  return <div className="password-field">
-    <Field icon={<LockKeyhole size={18}/>} id={id} label={label} type={visible?'text':'password'} maxLength={128} value={value} onChange={e=>onChange(e.target.value)} error={error} autoComplete={autoComplete} autoCapitalize="none" spellCheck={false} required />
-    <button type="button" className="password-toggle" aria-controls={id} aria-pressed={visible} aria-label={visible?'Ocultar contraseña':'Mostrar contraseña'} onClick={()=>setVisible(v=>!v)}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button>
-  </div>;
+  return <PasswordInput label={label} value={value} onChange={e=>onChange(e.target.value)} error={error} autoComplete={autoComplete} maxLength={128} required/>;
 }
 
 export function AuthForm({mode,onSubmit,onNavigate}:{mode:AuthMode;onSubmit:(payload:AuthPayload)=>Promise<void>;onNavigate:(mode:AuthMode)=>void}) {

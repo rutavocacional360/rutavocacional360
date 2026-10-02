@@ -1,4 +1,5 @@
 import {StyledSelect} from './StyledSelect';
+import {fieldMessage} from './field-message';
 import {filterNameInput} from '@/lib/validation';
 import { useId, useState, useEffect, useRef } from "react";
 import type {
@@ -10,7 +11,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { ArrowRight, Check, Info, LoaderCircle, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Check, Info, LoaderCircle, Eye, EyeOff, CircleCheck, CircleAlert, TriangleAlert } from "lucide-react";
 import type { Tone } from "../../types";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -133,9 +134,11 @@ export function Field({
   const key = id || auto;
   const inputRef = useRef<HTMLInputElement>(null);
   const [touched, setTouched] = useState(false);
+  const [nativeError, setNativeError] = useState('');
   const composing = useRef(false);
   const [inputNotice, setInputNotice] = useState('');
   function change(event: ChangeEvent<HTMLInputElement>) {
+    setNativeError('');
     const input = event.currentTarget;
     if (personName && !composing.current) {
       const raw = input.value, clean = filterNameInput(raw);
@@ -150,7 +153,7 @@ export function Field({
   }
   const problem = validate?.(props.value ?? '') || '';
   useEffect(() => { inputRef.current?.setCustomValidity(problem); }, [problem]);
-  const visibleError = error || (touched ? problem : '');
+  const visibleError = error || (touched ? problem : '') || nativeError;
   const desc = visibleError || inputNotice || hint;
   return (
     <div className={"field " + className}>
@@ -166,7 +169,7 @@ export function Field({
         onCompositionStart={event => { composing.current = true; props.onCompositionStart?.(event); }}
         onCompositionEnd={event => { composing.current = false; if (personName) change(event as unknown as ChangeEvent<HTMLInputElement>); props.onCompositionEnd?.(event); }}
         onBlur={event => { setTouched(true); props.onBlur?.(event); }}
-        onInvalid={event => { setTouched(true); props.onInvalid?.(event); }}
+        onInvalid={event => { event.preventDefault(); setTouched(true); setNativeError(fieldMessage(event.currentTarget)); props.onInvalid?.(event); }}
       />{trailingAction}</div>
       {desc && (
         <small id={key + "-hint"} className={visibleError ? "error-text" : "muted"} aria-live="polite">
@@ -292,9 +295,10 @@ export function Notice({
   children: ReactNode;
   tone?: Tone;
 }) {
+  const Icon = tone === 'danger' ? CircleAlert : tone === 'warning' ? TriangleAlert : tone === 'success' ? CircleCheck : Info;
   return (
-    <div className={"notice notice--" + tone}>
-      <Info size={20} aria-hidden="true" />
+    <div className={"notice notice--" + tone} role={tone === 'danger' ? 'alert' : 'status'} aria-atomic="true">
+      <Icon size={20} aria-hidden="true" />
       <div>{children}</div>
     </div>
   );

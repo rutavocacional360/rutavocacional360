@@ -33,4 +33,4 @@ export function AppShell({children,view,navigate,admin=false}:{children:ReactNod
  if(admin)return <AdminShell view={view}>{children}</AdminShell>;
  return <StudentShell view={view}>{children}</StudentShell>;
 }
-export function FocusShell({children,title,navigate}:{children:ReactNode;title:string;navigate:Navigate}){const toast=useToast();return <StudentShell view="evaluaciones" focus action={<Button variant="ghost" size="sm" onClick={async()=>{try{await flush();navigate('evaluaciones');}catch(error){toast((error as Error).message);}}} icon={<ArrowLeft size={17}/>}>Guardar y salir</Button>}>{children}</StudentShell>;}
+export function FocusShell({children,title,navigate}:{children:ReactNode;title:string;navigate:Navigate}){const toast=useToast();return <StudentShell view="evaluaciones" focus action={<Button variant="ghost" size="sm" onClick={async()=>{try{await flush();navigate('evaluaciones');}catch(error){toast((error as Error).message, 'danger');}}} icon={<ArrowLeft size={17}/>}>Guardar y salir</Button>}>{children}</StudentShell>;}

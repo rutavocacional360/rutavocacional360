@@ -6,7 +6,7 @@ import {
 } from "../../lib/admin-session";
 import { useSession, clearNotice } from "../../lib/session";
 import { Dialog } from "../ui/Dialog";
-import { Button } from "../ui/primitives";
+import { Button, PasswordInput, Notice } from "../ui/primitives";
 
 export function AdminSessionDialog() {
   const session = useSession();
@@ -93,18 +93,8 @@ export function AdminSessionDialog() {
             autoComplete="username"
           />
         </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            disabled={busy}
-          />
-        </label>
-        {error && <p role="alert">{error}</p>}
+        <PasswordInput label="Contraseña" value={password} onChange={e=>{setPassword(e.target.value);setError('');}} required maxLength={128} autoComplete="current-password" disabled={busy}/>
+        {error && <Notice tone="danger">{error}</Notice>}
         <Button type="submit" disabled={busy}>
           {busy ? "Verificando…" : "Continuar"}
         </Button>
