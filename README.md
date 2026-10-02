@@ -36,6 +36,11 @@ práctica del estudiante, notas y vistas de escritorio/móvil en una instalació
 
 ## Requisitos
 
+Las herramientas necesarias para compilar (esbuild, Tailwind/PostCSS y TypeScript)
+se incluyen en `dependencies`: Hostinger instala en modo producción y puede omitir
+`devDependencies` antes de ejecutar `npm run build`. No cambies el comando de
+compilación para ocultar un fallo ni desactives la comprobación de tipos.
+
 - Node.js 24 y MySQL 8.
 - Hostinger con soporte para aplicaciones Node.js/Next.js y MySQL.
 - Una base vacía para el primer despliegue y un directorio privado persistente fuera del código.
