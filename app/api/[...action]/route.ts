@@ -1,3 +1,4 @@
+import { nameProblem, emailProblem, passwordProblem, normalizeName } from "@/lib/validation";
 import { mailConfigured, mailConfig } from "@/lib/server/mail-config.mjs";
 import { sendAccountMail } from "@/lib/server/mail";
 import { readJsonObject } from "@/lib/server/request-body";
@@ -92,18 +93,13 @@ async function handle(
         "register:" + hash(req.headers.get("x-forwarded-for") || "local"),
       );
       const { name, email, password, institution } = body;
-      if (
-        typeof name !== "string" ||
-        name.trim().length < 3 ||
-        name.trim().length > 140 ||
-        typeof email !== "string" ||
-        email.length > 254 ||
-        !/^\S+@\S+\.\S+$/.test(email.trim()) ||
-        typeof password !== "string" ||
-        password.length < 15 ||
-        password.length > 128
-      )
-        fail("Revisa nombre, correo y contraseña (mínimo 15 caracteres).");
+      const problem = nameProblem(name) || emailProblem(email) || passwordProblem(password);
+      if (problem) fail(problem);
+      if (body.firstName !== undefined || body.lastName !== undefined) {
+        const nameError = nameProblem(body.firstName, 60) || nameProblem(body.lastName, 79);
+        if (nameError) fail(nameError);
+        if (normalizeName(body.firstName + ' ' + body.lastName) !== normalizeName(name)) fail('Revisa nombres y apellidos.');
+      }
       if (
         await db
           .prepare("SELECT id FROM users WHERE email=?")
@@ -121,11 +117,11 @@ async function handle(
       try {
         await db.transaction(async () => {
           await db.prepare("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)").run(
-            id, name.trim(), email.trim().toLowerCase(), passwordHash(password),
+            id, normalizeName(name), email.trim().toLowerCase(), passwordHash(password),
             "student", org.id, "", "Activo",
           );
           await put(id, "rv360:profile", {
-            name: name.trim(), email: email.trim().toLowerCase(),
+            name: normalizeName(name), ...(body.firstName !== undefined ? {firstName: normalizeName(body.firstName), lastName: normalizeName(body.lastName)} : {}), email: email.trim().toLowerCase(),
             ...education, reminders: "no",
           });
         });
@@ -138,10 +134,10 @@ async function handle(
       result = await workspace(await currentUser());
     } else if (action === "auth/login" && req.method === "POST") {
       if (
-        typeof body.email !== "string" ||
-        body.email.length > 254 ||
+        !!emailProblem(body.email) ||
+        (body.admin !== undefined && typeof body.admin !== "boolean") ||
         typeof body.password !== "string" ||
-        body.password.length > 128
+        body.password.length === 0 || body.password.length > 128
       )
         fail("Credenciales no válidas.", 401);
       await rateLimit("login:" + hash(body.email.trim().toLowerCase()));
@@ -170,7 +166,7 @@ async function handle(
           "El envío de correos aún no está configurado. Contacta con soporte para recuperar el acceso.",
           503,
         );
-      if (typeof body.email !== "string" || body.email.length > 254 || !/^\S+@\S+\.\S+$/.test(body.email.trim())) fail("Correo no válido.");
+      if (emailProblem(body.email)) fail("Correo no válido.");
       await rateLimit("reset:" + hash(body.email.trim().toLowerCase()));
       const row = (await db
         .prepare("SELECT id,email FROM users WHERE email=? AND status='Activo'")
@@ -196,9 +192,7 @@ async function handle(
       result = { ok: true };
     } else if (action === "auth/reset-confirm" && req.method === "POST") {
       if (
-        typeof body.password !== "string" ||
-        body.password.length < 15 ||
-        body.password.length > 128
+        passwordProblem(body.password)
       )
         fail("Usa una contraseña de 15 a 128 caracteres.");
       await rateLimit("reset-confirm:" + hash(String(body.token).slice(0, 128)));

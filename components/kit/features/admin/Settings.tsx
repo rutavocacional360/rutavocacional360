@@ -1,3 +1,4 @@
+import { settingsProblem } from "@/lib/validation";
 import { AuditLog } from "./Publication";
 import { flush } from "../../lib/session";
 import { useState } from "react";
@@ -44,16 +45,8 @@ export function Settings() {
         noValidate
         onSubmit={async (e) => {
           e.preventDefault();
-          if (
-            !form.name.trim() ||
-            !form.year.trim() ||
-            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
-          ) {
-            setError(
-              "Revisa los datos de la plataforma y el correo de contacto.",
-            );
-            return;
-          }
+          const problem = settingsProblem(form);
+          if (problem) { setError(problem); return; }
           try {await setStored(form);await flush();setError("");toast("Configuración guardada");} catch(e){setError((e as Error).message);}
         }}
       >

@@ -1,3 +1,4 @@
+import { nameProblem, emailProblem, passwordProblem } from "@/lib/validation";
 import { educationStages } from '../../data/baccalaureate';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -5,13 +6,13 @@ import { Eye, EyeOff, ArrowRight, CheckCircle2, Mail, LockKeyhole, UserRound, Lo
 import { Button, Checkbox, Field, Notice, SelectField, Stepper } from '../ui/primitives';
 import {SchoolFields,emptyEducation,type EducationData} from './EducationFields';
 export type AuthMode = 'login' | 'register' | 'reset' | 'admin';
-export interface AuthPayload extends Partial<EducationData> { email: string; password?: string; name?: string; stage?: string; institution?: string }
+export interface AuthPayload extends Partial<EducationData> { email: string; password?: string; name?: string; stage?: string; institution?: string; firstName?: string; lastName?: string }
 
 export function PasswordField({label,value,onChange,error,autoComplete='current-password'}:{label:string;value:string;onChange:(v:string)=>void;error?:string;autoComplete?:string}) {
   const [visible,setVisible]=useState(false);
   const id=useId();
   return <div className="password-field">
-    <Field icon={<LockKeyhole size={18}/>} id={id} label={label} type={visible?'text':'password'} value={value} onChange={e=>onChange(e.target.value)} error={error} autoComplete={autoComplete} autoCapitalize="none" spellCheck={false} required />
+    <Field icon={<LockKeyhole size={18}/>} id={id} label={label} type={visible?'text':'password'} maxLength={128} value={value} onChange={e=>onChange(e.target.value)} error={error} autoComplete={autoComplete} autoCapitalize="none" spellCheck={false} required />
     <button type="button" className="password-toggle" aria-controls={id} aria-pressed={visible} aria-label={visible?'Ocultar contraseña':'Mostrar contraseña'} onClick={()=>setVisible(v=>!v)}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button>
   </div>;
 }
@@ -31,12 +32,12 @@ export function AuthForm({mode,onSubmit,onNavigate}:{mode:AuthMode;onSubmit:(pay
     e.preventDefault();if(busy)return;
     const invalid:Record<string,string>={};
     if(!register||step===0){
-      if(email.trim().length>254||!/^\S+@\S+\.\S+$/.test(email.trim()))invalid.email='Escribe un correo electrónico válido.';
-      if(mode!=='reset'&&!password)invalid.password='Escribe tu contraseña.';
+      if(emailProblem(email))invalid.email='Escribe un correo electrónico válido.';
+      if(mode!=='reset'&&(!password||password.length>128))invalid.password='Escribe tu contraseña.';
       if(register){
-        if(name.trim().length<2||name.trim().length>60)invalid.name='Escribe tus nombres (entre 2 y 60 caracteres).';
-        if(surname.trim().length<2||surname.trim().length>79)invalid.surname='Escribe tus apellidos (entre 2 y 79 caracteres).';
-        if(password.length<15||password.length>128)invalid.password='Usa entre 15 y 128 caracteres.';
+        if(nameProblem(name,60))invalid.name=nameProblem(name,60);
+        if(nameProblem(surname,79))invalid.surname=nameProblem(surname,79);
+        if(passwordProblem(password))invalid.password=passwordProblem(password);
       }
     }
     if(register&&step===1&&!stage)invalid.stage='Selecciona tu etapa educativa.';
@@ -47,7 +48,7 @@ export function AuthForm({mode,onSubmit,onNavigate}:{mode:AuthMode;onSubmit:(pay
     if(register&&step<2){changeStep(step+1);return;}
     setBusy(true);
     try{
-      await onSubmit({email:email.trim(),password:mode==='reset'?undefined:password,name:(name+' '+surname).trim(),stage,...education});
+      await onSubmit({email:email.trim(),password:mode==='reset'?undefined:password,name:(name+' '+surname).trim(),...(register?{firstName:name.trim(),lastName:surname.trim()}:{}),stage,...education});
       setPassword('');if(mode==='reset')setDone(true);
     }catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
@@ -56,11 +57,11 @@ export function AuthForm({mode,onSubmit,onNavigate}:{mode:AuthMode;onSubmit:(pay
     {register&&<Stepper labels={['Tu cuenta','Tu perfil','Comenzar']} current={step}/>}
     {error&&<div ref={errorRef} tabIndex={-1} className="auth-error"><Notice tone="danger">{error}</Notice></div>}
     {register&&step===0&&<div className="auth-name-fields">
-      <Field icon={<UserRound size={18}/>} label="Nombres" value={name} onChange={e=>setName(e.target.value)} autoComplete="given-name" error={errors.name} required/>
-      <Field icon={<UserRound size={18}/>} label="Apellidos" value={surname} onChange={e=>setSurname(e.target.value)} autoComplete="family-name" error={errors.surname} required/>
+      <Field icon={<UserRound size={18}/>} label="Nombres" maxLength={60} validate={v=>nameProblem(v,60)} value={name} onChange={e=>setName(e.target.value)} autoComplete="given-name" error={errors.name} required/>
+      <Field icon={<UserRound size={18}/>} label="Apellidos" maxLength={79} validate={v=>nameProblem(v,79)} value={surname} onChange={e=>setSurname(e.target.value)} autoComplete="family-name" error={errors.surname} required/>
     </div>}
     {(!register||step===0)&&<>
-      <Field icon={<Mail size={18}/>} label={'Correo electrónico'} type="email" inputMode="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="nombre@correo.com" error={errors.email} required/>
+      <Field icon={<Mail size={18}/>} label={'Correo electrónico'} type="email" maxLength={254} validate={emailProblem} inputMode="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="nombre@correo.com" error={errors.email} required/>
       {mode!=='reset'&&<div><PasswordField label="Contraseña" value={password} onChange={setPassword} error={errors.password} autoComplete={register?'new-password':'current-password'}/>{register&&<p className="auth-field-hint">Usa al menos 15 caracteres.</p>}</div>}
     </>}
     {register&&step===1&&<>

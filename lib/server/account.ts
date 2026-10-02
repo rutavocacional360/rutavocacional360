@@ -1,3 +1,4 @@
+import { nameProblem, emailProblem, passwordProblem, normalizeName } from "../validation";
 import { mailConfigured, mailConfig } from "./mail-config.mjs";
 import { sendAccountMail } from "./mail";
 import { educationProfile } from "./education";
@@ -28,9 +29,9 @@ async function reauthenticate(user: any, password: unknown) {
 export async function updateProfile(user: any, body: any) {
   if(typeof body.firstName!=="string"||typeof body.lastName!=="string"||
     (body.stage!==undefined&&(typeof body.stage!=="string"||body.stage.length>100)))fail("Revisa nombres, apellidos y etapa educativa.");
-  const firstName = body.firstName.trim(),
-    lastName = body.lastName.trim();
-  if (!firstName || !lastName || firstName.length > 60 || lastName.length > 80)
+  const firstName = normalizeName(body.firstName),
+    lastName = normalizeName(body.lastName);
+  if (nameProblem(firstName,60) || nameProblem(lastName,79))
     fail("Revisa nombres y apellidos.");
   const previous = await document(user.id, "rv360:profile", {});
   const profile = {
@@ -58,9 +59,7 @@ export async function updateProfile(user: any, body: any) {
 export async function changePassword(user: any, body: any) {
   await reauthenticate(user, body.currentPassword);
   if (
-    typeof body.password !== "string" ||
-    body.password.length < 15 ||
-    body.password.length > 128 ||
+    passwordProblem(body.password) ||
     body.password !== body.confirm
   )
     fail(
@@ -83,6 +82,7 @@ export async function requestEmail(user: any, body: any) {
       "El cambio de correo no está disponible en este momento. Tu correo actual se mantiene.",
       503,
     );
+  if (emailProblem(body.email)) fail("Escribe un correo válido.");
   const email = String(body.email || "")
     .trim()
     .toLowerCase();

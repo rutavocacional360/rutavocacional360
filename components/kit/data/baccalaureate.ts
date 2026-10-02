@@ -1,4 +1,5 @@
 import {currentTechnicalOptions,technicalCatalogSource} from './technical-figures';
+import {textProblem} from '../../../lib/validation';
 export const pathwayVersion = 'bachillerato-universidad-3';
 export const educationStages = ['Estoy en 10.º de EGB y pasaré a 1.º de BGU', 'Estudiante de EGB Superior (8.º o 9.º)', 'Estoy eligiendo mi bachillerato', 'Estudiante de bachillerato', 'Me gradué del colegio', 'Busco mi primera carrera universitaria'];
 export const isChoosingBaccalaureate=(stage='')=>/EGB|eligiendo mi bachillerato/i.test(stage);
@@ -50,6 +51,8 @@ export function schoolProfile(body: SchoolProfile): Required<SchoolProfile> {
   const learningPreference = body.learningPreference ?? 'por-definir';
   if (!baccalaureateTypes.some(x => x.id === baccalaureate) || !learningPreferences.some(x => x.id === learningPreference)) throw Error('Revisa el tipo de bachillerato y tu preferencia de aprendizaje.');
   if (body.specialty !== undefined && typeof body.specialty !== 'string') throw Error('Revisa la especialidad de bachillerato.');
+  if (body.specialty !== undefined && textProblem(body.specialty,140)) throw Error('Revisa la especialidad de bachillerato.');
+  if (body.stage !== undefined && textProblem(body.stage,100)) throw Error('Revisa tu etapa educativa.');
   const specialty = body.specialty?.trim() || '';
   if (specialty.length > 140) throw Error('La especialidad no puede superar 140 caracteres.');
   if (body.stage !== undefined && (typeof body.stage !== 'string' || body.stage.length > 100)) throw Error('Revisa tu etapa educativa.');

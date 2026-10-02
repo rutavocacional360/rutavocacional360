@@ -1,3 +1,4 @@
+import { nameProblem, emailProblem, textProblem, settingsProblem, studentDocumentProblem } from "../validation";
 import { ecuadorCareers, careerOffers, catalogSource } from "./ecuador-catalog";
 import { calculateTest } from "@/components/kit/lib/test-engine";
 import { validateDraft, instrumentFor, battery } from "./battery";
@@ -69,6 +70,8 @@ async function saveDocumentInner(
   const isShared = shared(key);
   if (isShared && user.role !== "admin")
     fail("Solo administración puede modificar este apartado.", 403);
+  const studentProblem = studentDocumentProblem(key, value);
+  if (studentProblem) fail(studentProblem);
   const owner = isShared ? "institution:" + user.institutionId : user.id;
   const old = (await db
     .prepare("SELECT revision FROM documents WHERE owner=? AND key=?")
@@ -184,8 +187,8 @@ async function saveDocumentInner(
     try {
       for (const u of value) {
         if (
-          !u.name?.trim() ||
-          !/^\S+@\S+\.\S+$/.test(u.email) ||
+          !u || typeof u !== 'object' ||
+          nameProblem(u.name) || emailProblem(u.email) || textProblem(u.id,100,true) || textProblem(u.group,100) ||
           !["Estudiante", "Orientador"].includes(u.role) ||
           !["Activo", "Suspendido", "Invitación pendiente"].includes(u.status)
         )
@@ -244,6 +247,8 @@ async function saveDocumentInner(
       .run(value.name.trim(), user.id);
   }
   if (key === "rv360:admin-settings") {
+    const problem = settingsProblem(value);
+    if (problem) fail(problem);
     const org = (await db
       .prepare("SELECT code FROM institutions WHERE id=?")
       .get(user.institutionId)) as any;

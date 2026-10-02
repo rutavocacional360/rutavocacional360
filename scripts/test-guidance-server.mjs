@@ -129,6 +129,8 @@ try{
     }
     const {spawnSync}=await import('node:child_process');const security=spawnSync(process.execPath,['scripts/test-security-http.mjs'],{env:{...process.env,APP_URL:base},stdio:'inherit',windowsHide:true});assert.equal(security.status,0,'Real MySQL HTTP security validation');
    }
+   const {runValidationHttp}=await import('./test-validation-http.mjs');
+   await runValidationHttp({request,cookie,adminCookie,password,db});
    console.log('PASS HTTP: student/admin login, persisted profile, invalid values rejected, current report ordering and authorized admin regeneration.');
    const {runSchoolTrainingHttp}=await import('./test-school-training-http.mjs');
    await runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate});

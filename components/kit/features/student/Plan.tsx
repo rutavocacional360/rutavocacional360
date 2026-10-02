@@ -136,7 +136,7 @@ export function Plan() {
               {station.tip}
             </div>
           </Notice>
-          <TextareaField
+          <TextareaField maxLength={10000}
             label="Mi reflexión"
             placeholder="Escribe tus ideas. Puedes comenzar con una frase..."
             rows={7}

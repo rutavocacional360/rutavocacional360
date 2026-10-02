@@ -1,5 +1,5 @@
 import {StyledSelect} from './StyledSelect';
-import { useId, useState, useEffect } from "react";
+import { useId, useState, useEffect, useRef } from "react";
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -114,7 +114,7 @@ export function PageHeader({
     </header>
   );
 }
-type FieldMeta = { label: string; error?: string; hint?: string };
+type FieldMeta = { label: string; error?: string; hint?: string; validate?: (value: unknown) => string };
 export function Field({
   label,
   error,
@@ -123,22 +123,31 @@ export function Field({
   className = "",
   icon,
   trailingAction,
+  validate,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & FieldMeta & {icon?:ReactNode; trailingAction?:ReactNode}) {
   const auto = useId();
   const key = id || auto;
-  const desc = error || hint;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [touched, setTouched] = useState(false);
+  const problem = validate?.(props.value ?? '') || '';
+  useEffect(() => { inputRef.current?.setCustomValidity(problem); }, [problem]);
+  const visibleError = error || (touched ? problem : '');
+  const desc = visibleError || hint;
   return (
     <div className={"field " + className}>
       <label htmlFor={key}>{label}</label>
       <div className={[icon ? 'field-icon-control' : '', trailingAction ? 'field-trailing-control' : ''].filter(Boolean).join(' ') || undefined}>{icon&&<span aria-hidden="true">{icon}</span>}<input
         id={key}
-        aria-invalid={!!error}
+        ref={inputRef}
+        aria-invalid={!!visibleError}
         aria-describedby={desc ? key + "-hint" : undefined}
         {...props}
+        onBlur={event => { setTouched(true); props.onBlur?.(event); }}
+        onInvalid={event => { setTouched(true); props.onInvalid?.(event); }}
       />{trailingAction}</div>
       {desc && (
-        <small id={key + "-hint"} className={error ? "error-text" : "muted"}>
+        <small id={key + "-hint"} className={visibleError ? "error-text" : "muted"} aria-live="polite">
           {desc}
         </small>
       )}

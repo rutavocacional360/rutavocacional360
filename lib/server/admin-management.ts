@@ -1,8 +1,13 @@
+import { nameProblem, emailProblem, passwordProblem, textProblem, normalizeName } from "../validation";
 import { randomUUID } from "node:crypto";
 import { db, document, put, fail, passwordHash } from "./store";
 import { instruments } from "@/components/kit/data/instruments";
 import { listGuidance } from "./guidance";
 export async function manageUser(admin: any, body: any) {
+  if (body.action !== undefined && !['delete','reset-password'].includes(body.action)) fail('Operación de usuario no válida.');
+  for (const key of ['group','stage','institution']) {
+    if (body[key] !== undefined && textProblem(body[key], key === 'institution' ? 180 : 100)) fail('Revisa grupo, etapa y centro educativo.');
+  }
   for(const key of ['id','name','email','group','stage','institution']){
     if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>(key==='email'?254:key==='institution'?180:key==='name'?140:100)))fail('Revisa los datos del usuario.');
   }
@@ -23,9 +28,7 @@ export async function manageUser(admin: any, body: any) {
   if (body.action === "reset-password") {
     if (!existing) fail("Usuario no disponible.", 404);
     if (
-      typeof body.password !== "string" ||
-      body.password.length < 15 ||
-      body.password.length > 128
+      passwordProblem(body.password)
     )
       fail("Usa una contraseña de 15 a 128 caracteres.");
     if (body.password !== body.confirmPassword)
@@ -87,7 +90,7 @@ export async function manageUser(admin: any, body: any) {
       throw e;
     }
   } else {
-    const name = String(body.name || "").trim(),
+    const name = normalizeName(String(body.name || "")),
       email = String(body.email || "")
         .trim()
         .toLowerCase(),
@@ -99,10 +102,8 @@ export async function manageUser(admin: any, body: any) {
             ? "student"
             : "";
     if (
-      name.length < 3 ||
-      name.length > 140 ||
-      email.length > 254 ||
-      !/^\S+@\S+\.\S+$/.test(email) ||
+      nameProblem(name) ||
+      emailProblem(email) ||
       !role ||
       group.length > 100 ||
       !["Activo", "Suspendido", "Invitación pendiente"].includes(body.status)
@@ -115,9 +116,7 @@ export async function manageUser(admin: any, body: any) {
       fail("Ese correo ya pertenece a otra cuenta.", 409);
     if (
       !existing &&
-      (typeof body.password !== "string" ||
-        body.password.length < 15 ||
-        body.password.length > 128)
+      passwordProblem(body.password)
     )
       fail("Define una contraseña inicial de al menos 15 caracteres.");
     await db.exec("BEGIN IMMEDIATE");
