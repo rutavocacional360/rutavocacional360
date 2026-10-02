@@ -1,5 +1,5 @@
 import {StyledSelect} from './StyledSelect';
-import { useId } from "react";
+import { useId, useState, useEffect } from "react";
 import type {
   ButtonHTMLAttributes,
   HTMLAttributes,
@@ -8,7 +8,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { ArrowRight, Check, Info, LoaderCircle } from "lucide-react";
+import { ArrowRight, Check, Info, LoaderCircle, Eye, EyeOff } from "lucide-react";
 import type { Tone } from "../../types";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -122,20 +122,21 @@ export function Field({
   id,
   className = "",
   icon,
+  trailingAction,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & FieldMeta & {icon?:ReactNode}) {
+}: InputHTMLAttributes<HTMLInputElement> & FieldMeta & {icon?:ReactNode; trailingAction?:ReactNode}) {
   const auto = useId();
   const key = id || auto;
   const desc = error || hint;
   return (
     <div className={"field " + className}>
       <label htmlFor={key}>{label}</label>
-      <div className={icon ? 'field-icon-control' : undefined}>{icon&&<span aria-hidden="true">{icon}</span>}<input
+      <div className={[icon ? 'field-icon-control' : '', trailingAction ? 'field-trailing-control' : ''].filter(Boolean).join(' ') || undefined}>{icon&&<span aria-hidden="true">{icon}</span>}<input
         id={key}
         aria-invalid={!!error}
         aria-describedby={desc ? key + "-hint" : undefined}
         {...props}
-      /></div>
+      />{trailingAction}</div>
       {desc && (
         <small id={key + "-hint"} className={error ? "error-text" : "muted"}>
           {desc}
@@ -143,6 +144,15 @@ export function Field({
       )}
     </div>
   );
+}
+export function PasswordInput({ id, label, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & FieldMeta) {
+  const auto = useId();
+  const key = id || auto;
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { if (!props.value) setVisible(false); }, [props.value]);
+  const action = `${visible ? 'Ocultar' : 'Mostrar'}: ${label.toLowerCase()}`;
+  return <Field {...props} id={key} label={label} type={visible ? 'text' : 'password'} autoCapitalize="none" spellCheck={false}
+    trailingAction={<button className="field-visibility-toggle" type="button" disabled={props.disabled} aria-controls={key} aria-label={action} title={action} aria-pressed={visible} onClick={() => setVisible(value => !value)}>{visible ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</button>} />;
 }
 export function SelectField({
   label,
