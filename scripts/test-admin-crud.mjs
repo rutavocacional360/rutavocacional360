@@ -1,0 +1,142 @@
+import {completeAssessment} from './assessment-fixtures.mjs';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdirSync,mkdtempSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {createRequire} from 'node:module';
+
+// Every mutation runs against a new, isolated SQLite database.
+mkdirSync('.qa-tools',{recursive:true});
+const folder=mkdtempSync(resolve('.qa-tools','admin-crud-'));
+process.env.DB_DRIVER='sqlite';
+process.env.DATABASE_PATH=resolve(folder,'crud.sqlite');
+process.env.ACADEMIC_CONTENT_PATH=resolve(folder,'academic.json');
+const outfile=resolve(folder,'server.cjs');
+await build({stdin:{contents:`
+ export {db,put,document} from './lib/server/store';
+ export {saveDocument,submitAssessment} from './lib/server/operations';
+ export {startTest} from './lib/server/test-attempts';
+ export {availableOriginals,instrumentFor,batteryForClient} from './lib/server/battery';
+ export * from './lib/server/training';
+ export {instruments} from './components/kit/data/instruments';
+ export {calculateTest} from './components/kit/lib/test-engine';
+ export {schoolPracticeTemplate,schoolOrientationTemplate} from './components/kit/data/school-templates';
+`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
+ plugins:[{name:'server-marker',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
+const api=createRequire(import.meta.url)(outfile);
+const {db,put,document,saveTraining,trainingAction,trainingState,trainingCatalog,schoolPracticeTemplate,schoolOrientationTemplate,saveDocument,startTest,submitAssessment}=api;
+const admin={id:'crud-admin',name:'Admin QA',role:'admin',institutionId:'crud-org'};
+const student={id:'crud-student',name:'Estudiante QA',role:'student',institutionId:admin.institutionId};
+const other={...admin,id:'other-admin',institutionId:'other-org'};
+const action=(path,body,user=admin)=>trainingAction(user,'training/'+path,'POST',body,new URLSearchParams());
+const ref=s=>({kind:'simulator',id:s.id,version:s.version,revision:s.revision});
+const key='rv360:custom-tests',owner='institution:'+admin.institutionId;
+let revision=0;
+const tests=()=>document(owner,key,[]);
+const write=async value=>{revision=await saveDocument(admin,key,structuredClone(value),revision);return tests();};
+const conflict=fn=>assert.rejects(fn,e=>e.status===409);
+try {
+ await db.migrate();
+ await db.prepare('INSERT INTO institutions VALUES(?,?,?)').run(admin.institutionId,'CRUD QA','QA');
+ for(const u of [admin,student])await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run(u.id,u.name,u.id+'@example.test','no-login',u.role,u.institutionId,'','Activo');
+ await put(student.id,'rv360:profile',{stage:'Estoy en 10.º de EGB y pasaré a 1.º de BGU',baccalaureate:'por-definir'});
+ for(const instrument of api.instruments)await completeAssessment({db,calculateTest:api.calculateTest,userId:student.id,instrument});
+ const blank={id:'',version:0,revision:0,status:'draft',title:'',careerIds:[],instrument:{id:'qa',version:'1',title:'',description:'',options:[],questions:[]},purpose:'general',modes:['practice','exam'],durationMinutes:30,maxAttempts:3,gradePolicy:'last',feedback:'finish',selection:'fixed',quotas:[],areaWeights:[],questions:[],shuffleOptions:false,questionOrderFixedIds:[]};
+ for(const level of ['bachillerato','universidad']) {
+  const template={...schoolPracticeTemplate(blank,'ciencias'),educationLevel:level,title:'CRUD '+level};
+  if(level==='universidad')template.careerIds=[trainingCatalog().careers.find(c=>c.educationLevel==='universidad'||!c.id.startsWith('bachillerato:')).id];
+  const created=await saveTraining(admin,'simulator',template);
+  assert.equal((await saveTraining(admin,'simulator',template)).id,created.id,'Retry does not duplicate creation');
+  assert(!(await trainingState(student)).simulators.some(s=>s.id===created.id));
+  await assert.rejects(saveTraining(student,'simulator',template),e=>e.status===403);
+  const edited=await saveTraining(admin,'simulator',{...created,title:'Editado '+level});
+  await conflict(()=>saveTraining(admin,'simulator',{...created,title:'Edición obsoleta'}));
+  await conflict(()=>saveTraining(admin,'simulator',template));
+  const publishInput={...edited,status:'published'};
+  const published=await saveTraining(admin,'simulator',publishInput);
+  await conflict(()=>saveTraining(admin,'simulator',{...published,title:'Mutación de publicación'}));
+  await assert.rejects(action('archive',ref(published),other),e=>[403,404].includes(e.status));
+  let attempt;
+  if(level==='bachillerato') {
+   attempt=await api.startDirectSimulator(student,published.id,'practice');
+   await api.saveTrainingAnswers(student,{id:attempt.id,revision:0,answers:Object.fromEntries(template.questions.map(q=>[q.id,q.correctValues[0]])),flags:[]});
+   assert.equal((await api.finishTraining(student,attempt.id)).result.percent,100);
+  }
+  await conflict(()=>action('archive',{...ref(published),revision:published.revision-1}));
+  const archived=await action('archive',ref(published));
+  assert.equal(archived.status,'archived');
+  assert(!(await trainingState(student)).simulators.some(s=>s.id===published.id));
+  await conflict(()=>saveTraining(admin,'simulator',publishInput));
+  await conflict(()=>action('restore',ref(published)));
+  const restored=await action('restore',ref(archived));
+  assert.equal(restored.status,'published');
+  const secondDraft=await saveTraining(admin,'simulator',{...restored,version:0,revision:0,status:'draft',title:'Segunda versión '+level});
+  assert.equal(secondDraft.version,2);
+  const second=await saveTraining(admin,'simulator',{...secondDraft,status:'published'});
+  const old=(await trainingState(admin)).simulators.find(s=>s.id===created.id&&s.version===1);
+  assert.equal(old.status,'archived','Publishing archives the previous version');
+  await conflict(()=>action('restore',ref(old)));
+  await action('delete-simulator',ref(second));
+  assert(!(await trainingState(admin)).simulators.some(s=>s.id===created.id));
+  await conflict(()=>saveTraining(admin,'simulator',{...secondDraft,title:'No resucitar'}));
+  if(attempt)assert.equal((await api.attemptView(student,await api.attempt(student,attempt.id))).result.percent,100,'Deleted simulator retains attempt and grade');
+  const disposable=await saveTraining(admin,'simulator',{...template,title:'Descartable '+level});
+  await conflict(()=>action('delete-draft',{...ref(disposable),revision:0}));
+  await action('delete-draft',ref(disposable));
+  assert(!(await trainingState(admin)).simulators.some(s=>s.id===disposable.id));
+  console.log('PASS simulators '+level+': create, retry, edit, conflicts, publish, archive, restore, version, delete and history');
+
+  const test={...schoolOrientationTemplate(),id:'crud-test-'+level,educationLevel:level,version:'1',title:'Test '+level,status:'Borrador',group:'Todos los estudiantes',due:''};
+  let catalog=await write([...(await tests()),test]);
+  catalog=await write(catalog.map(t=>t.id===test.id?{...t,title:'Editado '+level}:t));
+  await conflict(()=>saveDocument(admin,key,catalog,revision-1));
+  catalog=await write(catalog.map(t=>t.id===test.id?{...t,status:'Publicado'}:t));
+  const saved=catalog.find(t=>t.id===test.id);assert(saved.publishedAt);
+  await assert.rejects(write(catalog.map(t=>t.id===test.id?{...t,title:'Cambio ilegal'}:t)));
+  let submitted;
+  if(level==='bachillerato') {
+   await db.context(()=>startTest(student,test.id));
+   await saveDocument(student,'rv360:answers:'+test.id+':1',Object.fromEntries(test.questions.map(q=>[q.id,3])),0);
+   await db.context(()=>submitAssessment(student,test.id));
+   submitted=await db.prepare('SELECT * FROM submissions WHERE user_id=? AND instrument_id=?').get(student.id,test.id);
+   assert(submitted);
+  }
+  catalog=await write(catalog.map(t=>t.id===test.id?{...t,status:'Archivado'}:t));
+  assert.equal(catalog.find(t=>t.id===test.id).status,'Archivado');
+  catalog=await write(catalog.map(t=>t.id===test.id?{...t,status:'Publicado'}:t));
+  const next={...saved,id:test.id+'-v2',stableId:test.id,version:'2',status:'Borrador'};delete next.publishedAt;delete next.publishedBy;
+  catalog=await write([...catalog,next]);
+  catalog=await write(catalog.map(t=>t.id===next.id?{...t,status:'Publicado'}:t));
+  assert.equal(catalog.find(t=>t.id===test.id).status,'Archivado');
+  catalog=await write(catalog.map(t=>t.id===test.id?{...t,status:'Publicado'}:t));
+  assert.equal(catalog.find(t=>t.id===next.id).status,'Archivado','Restoring a version archives its published successor');
+  catalog=await write(catalog.map(t=>t.id===next.id?{...t,status:'Eliminado'}:t));
+  assert.equal(catalog.find(t=>t.id===next.id).status,'Eliminado','Deletion accepted by server');
+  catalog=await write(catalog.map(t=>t.id===next.id?{...t,status:'Archivado'}:t));
+  const draft={...test,id:test.id+'-discard'};
+  catalog=await write([...catalog,draft]);
+  catalog=await write(catalog.filter(t=>t.id!==draft.id));
+  assert(!catalog.some(t=>t.id===draft.id));
+  await assert.rejects(write(catalog.filter(t=>t.id!==test.id)),'Published history cannot be physically removed');
+  if(submitted)assert.deepEqual(await db.prepare('SELECT * FROM submissions WHERE id=?').get(submitted.id),submitted);
+  console.log('PASS tests '+level+': create, edit, publish, archive, restore, version, soft delete, draft delete, conflicts and history');
+ }
+ await assert.rejects(saveTraining(admin,'simulator',{...blank,educationLevel:'invalid'}));
+ await assert.rejects(write([...(await tests()),{...schoolOrientationTemplate(),id:'invalid',version:'1',status:'Borrador',educationLevel:'invalid'}]));
+ const original=(await api.availableOriginals(student))[0];
+ const originalAttempt=await db.context(()=>startTest(student,original.id));
+ let statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Archivado'},0);
+ assert(!(await api.availableOriginals(student)).some(t=>t.id===original.id));
+ assert.equal((await db.context(()=>startTest(student,original.id))).id,originalAttempt.id,'Archiving retains in-progress attempts');
+ await db.prepare("UPDATE assessment_attempts SET state='expired' WHERE id=?").run(originalAttempt.id);
+ await assert.rejects(db.context(()=>startTest(student,original.id)),e=>e.status===403);
+ statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Eliminado'},statusRevision);
+ assert.equal(await api.instrumentFor(student,original.id),undefined,'Deleted original cannot be submitted from a frozen battery');
+ await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Original'},statusRevision);
+ assert((await api.availableOriginals(student)).some(t=>t.id===original.id));
+ await put(student.id,'rv360:battery',{id:'frozen-without-originals',frozen:true,instruments:[]});
+ assert.equal((await api.instrumentFor(student,original.id)).id,original.id,'Restored original accessible even if absent from an older battery');
+ assert((await api.batteryForClient(student)).instruments.some(t=>t.id===original.id));
+ console.log('PASS original tests: archive/delete affect student availability, open attempts retained, restore and direct-access protection');
+ console.log('PASS admin CRUD regression suite (isolated SQLite).');
+} finally { await db.close(); }

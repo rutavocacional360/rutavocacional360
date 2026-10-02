@@ -5,6 +5,9 @@ import { areaFor, areas, degreeOffer, readAcademic, ACADEMIC_VERSION } from './a
 import { localGuidance, GUIDANCE_RULES_VERSION } from '@/components/kit/lib/local-guidance';
 import { pathwayVersion } from '@/components/kit/data/baccalaureate';
 import { calculateTest } from '@/components/kit/lib/test-engine';
+import { assessmentReadiness } from './assessment-readiness';
+import { schoolGuidance } from '@/components/kit/lib/school-guidance';
+import { defaultPreparationLevel } from '@/components/kit/data/school-training';
 
 export const PROMPT_VERSION = ACADEMIC_VERSION;
 export const configured = () => true;
@@ -25,6 +28,7 @@ export async function readGuidance(user:any,id:string) {
   return r;
 }
 export async function ensureGuidance(user:any,_regenerate=false) {
+  const readiness=await assessmentReadiness(user);
   const {run}=await batterySubmissions(user);
   const stored=(await db.prepare('SELECT * FROM submissions WHERE user_id=? ORDER BY created_at DESC, id DESC').all(user.id)) as any[];
   // Select the newest attempt before checking publication; never substitute an older one.
@@ -42,7 +46,7 @@ export async function ensureGuidance(user:any,_regenerate=false) {
   }
   const profile=await document(user.id,'rv360:profile',{}),content=readAcademic();
   const digest=hash(JSON.stringify({
-    attempts:rows.map(r=>({id:r.id,evaluation:r.evaluation})),
+    attempts:rows.map(r=>({id:r.id,evaluation:r.evaluation})),readiness,
     assigned:run.instruments.map((t:any)=>t.id), profile, name:user.name,
     catalog:catalogSource.version,content:content.id,rulesVersion:GUIDANCE_RULES_VERSION,mapping:pathwayVersion,
   }));
@@ -57,10 +61,19 @@ export async function ensureGuidance(user:any,_regenerate=false) {
     profile,content:{...content,areas},catalog:catalog as any,
   });
   if(!report)fail('No hay resultados publicados para generar orientación.',409);
+  const routeReadiness=readiness[defaultPreparationLevel(profile)];
+  report.partial=!routeReadiness.ready;
+  report.progress={submitted:routeReadiness.completed,total:routeReadiness.total};
+  if(!readiness.universidad.ready)report.analysis.recommendations=[];
+  if(!readiness.bachillerato.ready)report.analysis.pathway={...schoolGuidance([],[],profile),reason:'Completa todos los tests de Bachillerato y espera la publicación de sus resultados para recibir orientación.'};
+  if(!readiness.universidad.ready&&!readiness.bachillerato.ready){
+    report.analysis.summary='Tus respuestas están guardadas. Completa los tests pendientes para recibir recomendaciones vocacionales y acceder a los cursos.';
+    report.analysis.nextSteps=['Completa tus tests pendientes en Mis tests.','Si tus resultados están en revisión, espera su publicación por administración.'];
+  }
   const version=Number(((await db.prepare('SELECT MAX(version) AS v FROM guidance_reports WHERE user_id=?').get(user.id)) as any)?.v||0)+1;
   // Concurrent dashboard/course/result requests must reuse the same snapshot.
   const now=new Date().toISOString(),id=hash('guidance:'+user.id+':'+digest);
-  const r={...report!,id,createdAt:now,version,batteryId:run.id,promptVersion:PROMPT_VERSION};
+  const r={...report!,readiness,id,createdAt:now,version,batteryId:run.id,promptVersion:PROMPT_VERSION};
   await db.prepare('INSERT INTO guidance_reports VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').run(id,user.id,user.institutionId,digest,version,'available',now,now,0,JSON.stringify(r));
   return asReport(await db.prepare('SELECT * FROM guidance_reports WHERE id=? AND user_id=?').get(id,user.id));
 }

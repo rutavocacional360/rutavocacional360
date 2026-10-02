@@ -31,6 +31,12 @@ const test = session.values['rv360:battery'].instruments.find(t => t.id === 'int
 const answers = Object.fromEntries(test.questions.map(q => [q.id, q.dimension === test.questions[0].dimension ? 5 : 1]));
 await student('state', {key: 'rv360:answers:'+test.id+':'+test.version, value: answers, revision: 0}, 'PUT');
 await student('assessments/submit', {instrumentId: test.id});
+for(const pending of session.values['rv360:battery'].instruments.filter(t=>t.id!==test.id)){
+ await student('assessments/start',{instrumentId:pending.id});
+ const values=Object.fromEntries(pending.questions.map(q=>[q.id,(q.options||pending.options)[0].value]));
+ await student('state',{key:'rv360:answers:'+pending.id+':'+pending.version,value:values,revision:0},'PUT');
+ await student('assessments/submit',{instrumentId:pending.id});
+}
 await student('reports/guidance');
 const state = await student('training'), careerId = state.recommendations[0]?.careerId;
 assert(careerId, 'Las respuestas diferenciadas deben generar recomendaciones.');
@@ -38,7 +44,7 @@ const questions = Array.from({length: 10}, (_, i) => ({id:'q'+i, text:'Dos más 
 let sim = {id:'',version:0,revision:0,status:'published',title:'Regresión directa '+randomUUID(),careerIds:[careerId],instrument:{id:'qa',version:'1',title:'QA',description:'Preparación de prueba',source:'QA',options:[],questions:[]},purpose:'general',modes:['practice','exam'],durationMinutes:1,practiceDurationMinutes:0,maxAttempts:2,gradePolicy:'best',feedback:'finish',selection:'fixed',quotas:[],areaWeights:[],questions,shuffleOptions:false,questionOrderFixedIds:[]};
 await admin('training/entity',{kind:'simulator',entity:{...sim,careerIds:['invalid-career']}},'POST',400);
 sim = await admin('training/entity',{kind:'simulator',entity:sim});
-await denied('training/simulator/start',{simulatorId:sim.id,mode:'practice'},'POST',403);
+await denied('training/simulator/start',{simulatorId:sim.id,mode:'practice'},'POST',409);
 await admin('training/simulator/start',{simulatorId:sim.id,mode:'practice'},'POST',403);
 const catalog = (await student('training')).simulators.find(s => s.id === sim.id);
 assert.deepEqual(catalog.careerIds,[careerId]);assert.equal(catalog.instrument.description,sim.instrument.description);
@@ -60,7 +66,7 @@ assert.equal(second.simulator.version,sim.version);
 await student('training/finish',{id:second.id});
 await student('training/simulator/start',{simulatorId:sim.id,mode:'practice'},'POST',409);
 assert.equal((await student('training/attempt?id='+resumed.id)).result.percent,20);
-const archived = await admin('training/archive',{kind:'simulator',id:sim.id,version:sim.version});
+const archived = await admin('training/archive',{kind:'simulator',id:sim.id,version:sim.version,revision:sim.revision});
 assert(!(await student('training')).simulators.some(s=>s.id===sim.id));
 await student('training/simulator/start',{simulatorId:sim.id,mode:'exam'},'POST',404);
 await admin('training/delete-simulator',{id:sim.id,version:sim.version,revision:archived.revision});

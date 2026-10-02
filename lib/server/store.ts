@@ -1,6 +1,6 @@
 import { mailConfigured } from "./mail-config.mjs";
 import { instrumentProblems } from "@/components/kit/lib/test-engine";
-import { batteryForClient } from "./battery";
+import { batteryForClient, availableOriginals } from "./battery";
 import { testProblem } from "./test-validation";
 import "server-only";
 import {
@@ -182,6 +182,7 @@ export async function workspace(user: any) {
     revisions[row.key] = row.revision;
   }
   if (user.role === "student") {
+    values["rv360:available-originals"] = (await availableOriginals(user)).map(t => t.id);
     const open = (await db
       .prepare(
         "SELECT snapshot FROM assessment_attempts WHERE user_id=? AND state='in_progress'",
@@ -312,9 +313,11 @@ export function validateTest(t: any) {
     JSON.stringify(t).length > 1000000
   )
     fail("Borrador no válido.");
-  if (!["Borrador", "Publicado", "Archivado"].includes(t.status))
+  if (!["Borrador", "Publicado", "Archivado", "Eliminado"].includes(t.status))
     fail("Estado no válido.");
-  if (t.status === "Borrador") return;
+  if (t.educationLevel !== undefined && !["bachillerato", "universidad", "ambos"].includes(t.educationLevel))
+    fail("Selecciona una ruta de orientación válida.");
+  if (t.status === "Borrador" || t.status === "Eliminado") return;
   const errors = instrumentProblems(t);
   if (errors.length) fail(errors.map((e) => e.message).join(" "));
   if (

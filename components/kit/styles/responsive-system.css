@@ -1,6 +1,11 @@
 /* Intrinsic sizing: children may shrink without clipping text or disabling zoom. */
 .ad-main,.ad-content,.compact-content,.focus-main,.auth-main,.account-layout>*{min-width:0}
 .grid>*{min-width:0}
+.manager-editor-fields{border:0;padding:0;margin:0;min-width:0;max-width:100%}
+.test-action-buttons{flex-wrap:wrap}
+.test-action-buttons .button{min-height:44px;white-space:normal;overflow-wrap:anywhere}
+.simulator-manager .page-header>.row{flex-wrap:wrap;min-width:0;max-width:100%}
+.simulator-manager .ar-tabs{flex-wrap:wrap;gap:12px}
 .field,.field>input,.field>textarea,.rv-select-trigger{min-width:0;max-width:100%}
 .page-header,.section-title{flex-wrap:wrap}
 .page-header h1,.card h2,.card h3,.notice{overflow-wrap:anywhere}
@@ -22,6 +27,10 @@
 .dialog .section-title{gap:12px;align-items:flex-start}
 .dialog .section-title h2{min-width:0;flex:1;overflow-wrap:anywhere}
 @media(max-width:767px){
+ .simulator-manager .page-header>.row{width:100%}
+ .simulator-manager .page-header>.row>.button{flex:1 1 180px;white-space:normal;min-height:44px}
+ .test-action-buttons .button{flex:1 1 140px}
+ .simulator-manager .ar-tabs>.button{flex:1;min-height:44px}
  .te-editor-page .te-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding-bottom:8px}
  .te-editor-page .te-steps button{min-width:0;min-height:66px;white-space:normal;overflow-wrap:anywhere;font-size:14px}
  .te-editor-page .te-body{padding:16px}

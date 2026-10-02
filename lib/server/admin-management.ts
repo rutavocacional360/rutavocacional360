@@ -1,3 +1,5 @@
+import {assessmentReadiness} from './assessment-readiness';
+import {defaultPreparationLevel} from '@/components/kit/data/school-training';
 import { nameProblem, emailProblem, passwordProblem, textProblem, normalizeName } from "../validation";
 import { randomUUID } from "node:crypto";
 import { db, document, put, fail, passwordHash } from "./store";
@@ -225,17 +227,11 @@ export async function adminAnalytics(user: any) {
     completed = new Set<string>(),
     started = new Set<string>();
   for (const student of students) {
-    const own = submissions.filter((s) => s.user_id === student.id),
-      expected =
-        (await document(student.id, "rv360:battery"))?.instruments ||
-        instruments;
-    if (
-      expected.length &&
-      expected.every((t: any) =>
-        own.some((s) => s.instrument_id === t.id && s.version === t.version),
-      )
-    )
-      completed.add(student.id);
+    const own = submissions.filter((s) => s.user_id === student.id);
+    const readiness=await assessmentReadiness({...student,role:'student',institutionId:user.institutionId,group:student.groupName});
+    const level=defaultPreparationLevel(await document(student.id,'rv360:profile',{}));
+    if(readiness[level].ready)completed.add(student.id);
+    else reportStudents.delete(student.id);
     const drafts = (await db
       .prepare(
         "SELECT value FROM documents WHERE owner=? AND key LIKE 'rv360:answers:%'",

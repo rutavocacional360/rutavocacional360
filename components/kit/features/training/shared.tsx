@@ -23,6 +23,7 @@ export function useTraining() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const requestId = useRef(0);
+  const mutationRunning = useRef(false);
   const refresh = useCallback(async () => {
     const id = ++requestId.current;
     try {
@@ -51,6 +52,8 @@ export function useTraining() {
     };
   }, [refresh]);
   const run = async (fn: () => Promise<any>) => {
+    if (mutationRunning.current) return;
+    mutationRunning.current = true;
     setBusy(true);
     setError("");
     try {
@@ -61,6 +64,7 @@ export function useTraining() {
       setError((e as Error).message);
       throw e;
     } finally {
+      mutationRunning.current = false;
       setBusy(false);
     }
   };

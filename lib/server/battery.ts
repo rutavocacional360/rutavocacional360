@@ -4,6 +4,18 @@ import { instruments, answerKey } from "@/components/kit/data/instruments";
 import { db, document, put, assigned, studentInstrument, fail } from "./store";
 import { asyncFind, asyncFilter } from "@/lib/server/async-collections";
 
+export async function availableOriginals(user: any) {
+  const owner = "institution:" + user.institutionId;
+  const statuses = await document(owner, "rv360:admin-original-status", {});
+  const custom = await asyncFilter(await document(owner, "rv360:custom-tests", []), async (t: any) => await assigned(t, user));
+  return instruments.filter(t => (!statuses[t.id] || statuses[t.id] === "Original") && !custom.some((c: any) => c.stableId === t.id));
+}
+
+export async function currentAssessments(user: any) {
+  const custom = await asyncFilter(await document("institution:" + user.institutionId, "rv360:custom-tests", []), async (t: any) => await assigned(t, user));
+  return [...await availableOriginals(user), ...custom];
+}
+
 export async function battery(user: any, freeze = false) {
   if (user.role !== "student") return null;
   let run = await document(user.id, "rv360:battery");
@@ -20,7 +32,7 @@ export async function battery(user: any, freeze = false) {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
       frozen: freeze,
-      instruments: [...instruments, ...custom],
+      instruments: [...await availableOriginals(user), ...custom],
     };
     if (freeze) await put(user.id, "rv360:battery", run);
   }
@@ -28,10 +40,11 @@ export async function battery(user: any, freeze = false) {
 }
 export async function batteryForClient(user: any) {
   const run = await battery(user);
+  const originals = run ? await availableOriginals(user) : [];
   return run
     ? {
         ...run,
-        instruments: run.instruments.map((t: any) => studentInstrument(t)),
+        instruments: [...run.instruments, ...originals.filter(t => !run.instruments.some((saved: any) => saved.id === t.id))].map((t: any) => studentInstrument(t)),
       }
     : null;
 }
@@ -57,8 +70,13 @@ export async function instrumentFor(user: any, id: string) {
     )
     .get(user.id, id)) as any;
   if (open) return JSON.parse(open.snapshot);
+  const originals = await availableOriginals(user);
+  if (instruments.some(t => t.id === id) && !originals.some(t => t.id === id)) return undefined;
+  const current = (await document("institution:" + user.institutionId, "rv360:custom-tests", [])).find((t: any) => t.id === id);
+  if (current && !(await assigned(current, user))) return undefined;
   return (
     (await battery(user))?.instruments.find((t: any) => t.id === id) ||
+    originals.find(t => t.id === id) ||
     (await asyncFind(
       await document(
         "institution:" + user.institutionId,

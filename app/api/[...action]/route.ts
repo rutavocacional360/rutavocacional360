@@ -20,7 +20,8 @@ import { startTest, reviewTest } from "@/lib/server/test-attempts";
 import { calculateTest } from "@/components/kit/lib/test-engine";
 import { educationProfile } from "@/lib/server/education";
 import { manageUser, adminAnalytics } from "@/lib/server/admin-management";
-import { refreshAcademicContent } from "@/lib/server/academic-content.mjs";
+import { refreshAcademicContent, readAcademic } from "@/lib/server/academic-content.mjs";
+import { providerReady } from "@/lib/server/ai-provider";
 import {
   updateProfile,
   changePassword,
@@ -273,6 +274,10 @@ async function handle(
             ),
           ),
         );
+      } else if (action === "admin/orientation-content" && req.method === "GET") {
+        await requireUser(true);
+        const content = readAcademic();
+        result = { configured: providerReady(), source: content.source, model: content.model, contentId: content.id };
       } else if (
         action === "admin/orientation-content" &&
         req.method === "POST"
@@ -287,6 +292,8 @@ async function handle(
             reused: !!shared.reused,
           };
         } catch (e: any) {
+          if(e.message === 'GEMINI_CONFIGURATION')fail('Configura GEMINI_API_KEY en el entorno privado del servidor para activar la IA.',503);
+          if(e.message === 'PROVIDER_AUTH')fail('La credencial de IA no es válida o no tiene acceso al modelo configurado.',503);
           fail(
             e.message === "PROVIDER_QUOTA"
               ? "Cuota de Gemini agotada. Se conserva el contenido disponible."

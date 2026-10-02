@@ -1,4 +1,5 @@
 import { settingsProblem, emailProblem, textProblem } from "@/lib/validation";
+import { AISettings } from './AISettings';
 import { AuditLog } from "./Publication";
 import { flush } from "../../lib/session";
 import { useState } from "react";
@@ -143,6 +144,7 @@ export function Settings() {
           <small className="muted">Los cambios se aplican al guardar.</small>
         </div>
       </form>
+      <AISettings/>
       <div className="stack" style={{marginTop:24}}><AuditLog/></div>
     </>
   );

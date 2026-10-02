@@ -10,9 +10,13 @@ export const schoolTrainingTargets=[
 ];
 export function schoolPreparationRecommendations(report:any){
  const p=report?.analysis?.pathway;
- return schoolTrainingTargets.map(t=>({careerId:t.id,educationLevel:'bachillerato',reason:
+ if(!p||p.suggested==='pendiente'||report.readiness?.bachillerato?.ready!==true)return [];
+ const related=new Set([...(p.science||[]),...(p.technical||[])].map(o=>'bachillerato:'+o.id));
+ if(['ciencias','ambas'].includes(p.suggested))related.add('bachillerato:ciencias');
+ if(['tecnico','ambas'].includes(p.suggested))related.add('bachillerato:tecnico');
+ return schoolTrainingTargets.filter(t=>related.has(t.id)).map(t=>({careerId:t.id,educationLevel:'bachillerato',reason:
   [...(p?.science||[]),...(p?.technical||[])].find(o=>'bachillerato:'+o.id===t.id)?.reason||
-  'Opción para conocer y comparar antes de elegir. Practicar sus contenidos no determina tu aptitud ni te obliga a escogerla.',
-  suggested:!![...(p?.science||[]),...(p?.technical||[])].some(o=>'bachillerato:'+o.id===t.id)}));
+  p.reason,
+  suggested:true}));
 }
 export const defaultPreparationLevel=(profile:any):EducationLevel=>isChoosingBaccalaureate(profile?.stage)?'bachillerato':'universidad';

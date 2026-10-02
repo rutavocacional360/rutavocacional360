@@ -13,8 +13,22 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  assert.equal(registration.value.values['rv360:profile'].baccalaureate,'por-definir');
  const admin=async(path,body,status)=> (await request(path,body,adminCookie,body?'POST':'GET',status)).value;
  const student=async(path,body,method,status)=> (await request(path,body,cookie,method,status)).value;
- const before=await student('training');assert.equal(before.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length,40);
+ const before=await student('training');assert.equal(before.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length,0);
+ assert.equal(before.readiness.bachillerato.ready,false);
  const blank={id:'',version:0,revision:0,status:'published',title:'',instrument:{id:'qa',version:'1',title:'',description:'',options:[],questions:[]},purpose:'general',modes:['practice','exam'],durationMinutes:30,maxAttempts:2,gradePolicy:'last',feedback:'finish',selection:'fixed',quotas:[],areaWeights:[],questions:[],shuffleOptions:false,questionOrderFixedIds:[]};
+ const lockedSimulator=await admin('training/entity',{kind:'simulator',entity:schoolPracticeTemplate(blank,'ciencias')});
+ await student('training/simulator/start',{simulatorId:lockedSimulator.id,mode:'practice'},'POST',409);
+ assert.equal((await student('training')).simulators.length,0);
+ for(const test of registration.value.values['rv360:battery'].instruments){
+  await student('assessments/start',{instrumentId:test.id});
+  const answers=Object.fromEntries(test.questions.map(q=>[q.id,q.dimension&&['R','I'].includes(q.dimension)?5:(q.options||test.options)[0].value]));
+  await student('state',{key:'rv360:answers:'+test.id+':'+test.version,value:answers,revision:0},'PUT');
+  await student('assessments/submit',{instrumentId:test.id});
+ }
+ assert((await student('training')).readiness.bachillerato.ready);
+ const universityRecommendations=(await student('training')).recommendations.filter(r=>!r.careerId.startsWith('bachillerato:')).map(r=>r.careerId);
+
+ await admin('training/delete-simulator',{kind:'simulator',id:lockedSimulator.id,version:lockedSimulator.version,revision:lockedSimulator.revision});
  const created=[];
  for(const kind of ['ciencias','tecnico']){
   const template=schoolPracticeTemplate(blank,kind);
@@ -39,12 +53,25 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  const answers=Object.fromEntries(t.questions.map(q=>[q.id,q.dimension==='R'?5:2]));
  const studentSession=await student('session');
  assert(studentSession.values['rv360:custom-tests'].some(c=>c.id===t.id));
+ await student('assessments/start',{instrumentId:t.id});
  await student('state',{key:'rv360:answers:'+t.id+':'+t.version,value:answers,revision:0},'PUT');
  await student('assessments/submit',{instrumentId:t.id});
- const report=(await student('reports/guidance')).items[0];assert.equal(report.analysis.pathway.suggested,'tecnico');assert.equal(report.analysis.recommendations.length,0);
- const archived=await admin('training/archive',{kind:'simulator',id:created[0].id,version:created[0].version});assert(archived);
- assert(!(await student('training')).simulators.some(s=>s.id===created[0].id));
- assert((await student('training')).attempts.some(a=>a.simulator.id===created[0].id&&a.result.percent===100));
+ const report=(await student('reports/guidance')).items[0];assert.equal(report.analysis.pathway.suggested,'tecnico');assert.deepEqual(report.analysis.recommendations.map(r=>r.careerId),universityRecommendations);
+ const archived=await admin('training/archive',{kind:'simulator',id:created[1].id,version:created[1].version,revision:created[1].revision});assert(archived);
+ assert(!(await student('training')).simulators.some(s=>s.id===created[1].id));
+ assert((await student('training')).attempts.some(a=>a.simulator.id===created[1].id&&a.result.percent===100));
+ await admin('training/restore',{kind:'simulator',id:archived.id,version:archived.version,revision:created[1].revision},409);
+ const restored=await admin('training/restore',{kind:'simulator',id:archived.id,version:archived.version,revision:archived.revision});
+ assert((await student('training')).simulators.some(s=>s.id===restored.id));
+ await admin('training/delete-simulator',{kind:'simulator',id:restored.id,version:restored.version,revision:restored.revision});
+ assert(!(await student('training')).simulators.some(s=>s.id===restored.id));
+ assert((await student('training')).attempts.some(a=>a.simulator.id===restored.id&&a.result.percent===100));
+ let current=await admin('session');
+ await request('state',{key:'rv360:custom-tests',value:current.values['rv360:custom-tests'].map(item=>item.id===t.id?{...item,status:'Eliminado'}:item),revision:current.revisions['rv360:custom-tests']},adminCookie,'PUT');
+ assert(!(await student('session')).values['rv360:custom-tests'].some(item=>item.id===t.id));
+ current=await admin('session');
+ await request('state',{key:'rv360:custom-tests',value:current.values['rv360:custom-tests'].map(item=>item.id===t.id?{...item,status:'Archivado'}:item),revision:current.revisions['rv360:custom-tests']},adminCookie,'PUT');
+ console.log('PASS HTTP admin CRUD: stale restore rejected, restore/delete persisted, test soft deletion and recovery, student visibility and retained grades.');
  console.log('PASS HTTP school workflow: EGB registration, undecided profile, admin drafts/publication, invalid levels/targets, hidden keys, practice/resume/grades, scoped orientation and archived history.');
  return {cookie,created};
 }

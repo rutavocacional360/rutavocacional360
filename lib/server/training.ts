@@ -8,7 +8,8 @@ import {
   applyCatalog,
 } from "./ecuador-catalog";
 import { degreeOffer } from "./academic-content.mjs";
-import { listGuidance, ensureGuidance } from "./guidance";
+import { ensureGuidance } from "./guidance";
+import { assessmentReadiness, requireCompletedAssessments } from "./assessment-readiness";
 import {
   academicResult,
   academicInstrument,
@@ -30,7 +31,7 @@ import type {
 } from "@/components/kit/lib/training-types";
 import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
-import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget} from '@/components/kit/data/school-training';
+import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,preparationLevel} from '@/components/kit/data/school-training';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
 type User = {
@@ -135,6 +136,8 @@ async function validate(u: User, kind: string, e: any) {
     fail("Contenido inválido.");
   if (!["draft", "published", "archived"].includes(e.status))
     fail("Estado inválido.");
+  if (e.careerIds !== undefined && !Array.isArray(e.careerIds)) fail('Revisa las opciones de estudio.');
+  if (e.educationLevel !== undefined && !['bachillerato','universidad'].includes(e.educationLevel)) fail('Revisa el nivel de preparación.');
   if (
     kind === "simulator" &&
     (!Array.isArray(e.questions) ||
@@ -353,12 +356,19 @@ export async function saveTraining(u: User, kind: string, input: any) {
     const replay = (await db
       .prepare("SELECT result FROM training_mutations WHERE id=?")
       .get(mutationId)) as any;
-    if (replay) return JSON.parse(replay.result);
+    if (replay) {
+      const saved = JSON.parse(replay.result);
+      const current = (await rows(u, kind)).find(x => x.id === saved.id && x.version === saved.version);
+      if (current && current.revision === saved.revision && current.status === saved.status) return current;
+      fail("Este contenido cambió después del guardado. Recarga antes de continuar.", 409);
+    }
     const old = input.id
       ? (await rows(u, kind)).find(
           (x) => x.id === input.id && x.version === input.version,
         )
       : null;
+    if (input.id && input.version > 0 && !old)
+      fail("Esta versión ya no está disponible. Recarga el catálogo.", 409);
     if (old && old.revision !== input.revision)
       fail("Otra sesión cambió este contenido. Recarga antes de guardar.", 409);
     if (old?.status === "published" || old?.status === "archived")
@@ -391,6 +401,16 @@ export async function saveTraining(u: User, kind: string, input: any) {
         bankVersion: q.bankVersion || e.version,
       }));
     await validate(u, kind, e);
+    if (kind === "simulator" && e.status === "published") {
+      if ((await rows(u, kind)).some(x => x.id === e.id && x.version > e.version && x.status !== "draft"))
+        fail("Hay una versión más reciente. Crea una nueva versión antes de publicar.", 409);
+      for (const previous of (await rows(u, kind)).filter(x => x.id === e.id && x.version !== e.version && x.status === "published")) {
+        previous.status = "archived";
+        previous.revision++;
+        await db.prepare("UPDATE training_entities SET status=?,content=?,revision=? WHERE id=? AND version=?")
+          .run(previous.status, JSON.stringify(previous), previous.revision, previous.id, previous.version);
+      }
+    }
     await db
       .prepare(
         "INSERT INTO training_entities VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id,version) DO UPDATE SET status=excluded.status,revision=excluded.revision,content=excluded.content",
@@ -480,53 +500,21 @@ async function progress(e: any) {
   };
 }
 async function recommendations(u: User) {
-  let report:any;
-    if(u.role==='student'){
-      try{report=await ensureGuidance(u);}catch(error:any){if(error.status!==409)throw error;}
-    }else report=(await listGuidance(u)).find((r:any)=>r.status==='available');
-  let recs: any[] = [];
-  if (report)
-    recs = (report.analysis?.recommendations || []).map((r: any) => ({
-      ...r,
-      resultId: report.id,
-      testVersions: report.instruments.map((i: any) => ({
-        id: i.instrumentId,
-        version: i.version,
-      })),
-      mappingVersion: report.mappingVersion,
-      reportVersion: report.version,
-    }));
-  const submissions = (await db
-    .prepare(
-      "SELECT * FROM submissions WHERE user_id=? ORDER BY created_at DESC",
-    )
-    .all(u.id)) as any[];
-  const seen = new Set<string>();
-  for (const sub of submissions) {
-    const t = JSON.parse(sub.snapshot);
-    if (seen.has(t.stableId || t.id)) continue;
-    seen.add(t.stableId || t.id);
-    if (!(await resultIsReleased(sub))) continue;
-    const r = (await db
-      .prepare(
-        "SELECT result,revision FROM assessment_results WHERE submission_id=? ORDER BY revision DESC LIMIT 1",
-      )
-      .get(sub.id)) as any;
-    if (r)
-      recs.push(
-        ...(JSON.parse(r.result).careers || []).map((c: any) => ({
-          ...c,
-          resultId: sub.id,
-          testVersions: [{ id: sub.instrument_id, version: sub.version }],
-          mappingVersion: t.version,
-          reportVersion: r.revision,
-        })),
-      );
-  }
-  recs.push(...schoolPreparationRecommendations(report));
-  return recs.filter(
-    (r, i) => recs.findIndex((x) => x.careerId === r.careerId) === i,
-  );
+  if (u.role !== "student") return [];
+  let report: any;
+  try { report = await ensureGuidance(u); }
+  catch (error: any) { if (error.status === 409) return []; throw error; }
+  const recs = [
+    ...(report.readiness?.universidad?.ready ? report.analysis?.recommendations || [] : []),
+    ...schoolPreparationRecommendations(report),
+  ].map((r: any) => ({...r, resultId: report.id,
+    testVersions: report.instruments.map((i: any) => ({id: i.instrumentId, version: i.version})),
+    mappingVersion: report.mappingVersion, reportVersion: report.version}));
+  return recs.filter((r: any, i: number) => recs.findIndex((x: any) => x.careerId === r.careerId) === i);
+}
+function matchesRecommendations(course: Course, recs: any[]) {
+  return course.careerIds.some(id => recs.some(r => r.careerId === id)) ||
+    trainingCatalog().careers.some(c => course.fields.includes(c.area) && recs.some(r => r.careerId === c.id));
 }
 export async function trainingState(u: User) {
   await expireTraining();
@@ -567,12 +555,13 @@ export async function trainingState(u: User) {
         .all(u.institutionId || ""),
     };
   student(u);
+  const readiness = await assessmentReadiness(u);
   const recs = await recommendations(u),
     goal = (await document(u.id, "training:goal", {
       careerIds: [],
       fields: [],
     })) as TrainingGoal,
-    courses = unique((await rows(u, "course")).filter((c) => canRead(c, u))),
+    courses = unique((await rows(u, "course")).filter((c) => canRead(c, u) && readiness[preparationLevel(c.careerIds,c.educationLevel)].ready && matchesRecommendations(c,recs))),
     enrollments = await Promise.all(
       (
         (await db
@@ -609,9 +598,10 @@ export async function trainingState(u: User) {
             : s.questions.length,
       })),
     profiles: (await rows(u, "profile")).filter(
-      (p) => p.status === "published",
+      (p) => p.status === "published" && readiness.universidad.ready && p.careerIds.some((id: string) => recs.some((r: any) => r.careerId === id)),
     ),
     recommendations: recs,
+    readiness,
     goal,
     enrollments,
     courses: courses
@@ -693,11 +683,17 @@ export async function enroll(u: User, id: string, studentId?: string) {
         "SELECT * FROM training_enrollments WHERE user_id=? AND course_id=?",
       )
       .get(target.id, id)) as any;
-    if (prior) return await progress(prior);
+    if (prior) {
+      const saved = JSON.parse(prior.snapshot);
+      await requireCompletedAssessments(target, preparationLevel(saved.careerIds,saved.educationLevel));
+      return await progress(prior);
+    }
     const c = (await rows(u, "course")).find(
       (x) => x.id === id && canRead(x, target),
     );
     if (!c) fail("Curso no disponible para esta cuenta.", 403);
+    await requireCompletedAssessments(target, preparationLevel(c.careerIds,c.educationLevel));
+    if (!matchesRecommendations(c,await recommendations(target))) fail("El curso no corresponde a los resultados vocacionales publicados.",403);
     const origin = {
       assignedBy: studentId ? u.id : null,
       recommendations: (await recommendations(target)).filter((r) =>
@@ -815,6 +811,7 @@ export async function startTraining(
       c = JSON.parse(e.snapshot) as Course,
       a = c.activities.find((a) => a.id === aid);
     if (!a || a.kind !== "simulator") fail("Actividad no disponible.");
+    await requireCompletedAssessments(u, preparationLevel(c.careerIds,(c as any).educationLevel));
     const existing = (await db
       .prepare(
         "SELECT * FROM training_attempts WHERE user_id=? AND enrollment_id=? AND activity_id=? AND mode=? AND state IN ('in_progress','recoverable')",
@@ -882,6 +879,7 @@ export async function startDirectSimulator(u: User, simulatorId: string, mode: s
     const s = (await rows(u, "simulator")).find((s) => s.id === simulatorId && s.status !== "draft") as Simulator | undefined;
     if (!s || s.status !== "published" || !s.modes.includes(mode as any))
       fail("Simulador no disponible.", 404);
+    await requireCompletedAssessments(u, preparationLevel(s.careerIds,s.educationLevel));
     const courses = (await rows(u, "course")).filter((c) => canRead(c, u));
     const recs = await recommendations(u);
     if (!simulatorCareerIds(s, courses).some((id) => recs.some((r) => r.careerId === id)))
@@ -1273,18 +1271,29 @@ export async function trainingAction(
       return { ok: true };
     });
   }
-  if (path === "training/archive" && method === "POST") {
+  if (["training/archive", "training/restore"].includes(path) && method === "POST") {
     admin(u);
     return await tx(async () => {
       const e = await entity(u, b.kind, b.id, b.version);
-      e.status = "archived";
+      if (e.revision !== b.revision)
+        fail("El contenido cambió. Actualiza el catálogo antes de continuar.", 409);
+      const restoring = path === "training/restore";
+      if (restoring) {
+        if (e.status !== "archived") fail("Solo se puede restaurar contenido archivado.", 409);
+        if ((await rows(u, b.kind)).some(x => x.id === e.id && x.version > e.version && x.status !== "draft"))
+          fail("Hay una versión más reciente. Edítala o crea una nueva versión.", 409);
+        await validate(u, b.kind, { ...e, status: "published" });
+      } else if (e.status !== "published") {
+        fail("Solo se puede archivar contenido publicado.", 409);
+      }
+      e.status = restoring ? "published" : "archived";
       e.revision++;
       await db
         .prepare(
           "UPDATE training_entities SET status=?,content=?,revision=? WHERE id=? AND version=?",
         )
-        .run("archived", JSON.stringify(e), e.revision, e.id, e.version);
-      await audit(u, "Archivar", e.id, { version: e.version });
+        .run(e.status, JSON.stringify(e), e.revision, e.id, e.version);
+      await audit(u, restoring ? "Restaurar" : "Archivar", e.id, { version: e.version });
       return e;
     });
   }

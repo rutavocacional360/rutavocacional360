@@ -89,6 +89,12 @@ async function saveDocumentInner(
     const problem = labSettingsProblem(value);
     if (problem) fail(problem);
   }
+  if (key === "rv360:admin-original-status") {
+    if (!Number.isInteger(revision)) fail("Recarga el catálogo antes de guardar.", 409);
+    if (!value || Array.isArray(value) || typeof value !== "object" ||
+        Object.entries(value).some(([id, status]) => !instruments.some(t => t.id === id) || !["Original", "Archivado", "Eliminado"].includes(String(status))))
+      fail("Revisa el estado de los tests originales.");
+  }
   if (key === "rv360:custom-tests") {
     if (!Number.isInteger(revision))
       fail("Recarga el catálogo antes de guardar.", 409);
@@ -169,11 +175,13 @@ async function saveDocumentInner(
               offers: careerOffers([career.id])[career.id],
             };
           });
-        if (t.stableId)
+      }
+      if (t.status === "Publicado" && prior?.status !== "Publicado") {
+        const stableId = t.stableId || t.id;
           for (const other of value)
             if (
               other.id !== t.id &&
-              (other.stableId || other.id) === t.stableId &&
+              (other.stableId || other.id) === stableId &&
               other.status === "Publicado"
             )
               other.status = "Archivado";

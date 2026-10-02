@@ -1,3 +1,4 @@
+import {completeAssessment} from './assessment-fixtures.mjs';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -33,6 +34,7 @@ try{
  const profile=educationProfile({baccalaureate:'por-definir',stage:'Estoy eligiendo mi bachillerato',learningPreference:'investigar'});
  assert.equal(profile.stage,'Estoy eligiendo mi bachillerato');
  await put(user.id,'rv360:profile',profile);
+ for(const instrument of instruments.filter(t=>t.id!=='intereses'))await completeAssessment({db,calculateTest,userId:user.id,instrument,at:'2026-09-30T00:00:00Z'});
  await submit('science_test',t,evaluation,'2026-10-01T12:00:00Z');
  const first=await ensureGuidance(user);
  assert.equal(first.analysis.pathway.suggested,'ciencias');assert(first.analysis.recommendations.length>0);
@@ -57,7 +59,7 @@ try{
  const third=await ensureGuidance(user);
  assert.notEqual(third.id,second.id);assert.notDeepEqual(third.analysis.recommendations,second.analysis.recommendations);
  await submit('pending_test',{...t,resultPublication:'review'},evaluation,'2026-10-01T12:10:00Z');
- await assert.rejects(ensureGuidance(user),e=>e.status===409,'Do not reuse an older attempt when the latest is withheld');
+ assert.equal((await ensureGuidance(user)).analysis.recommendations.length,0,'Do not reuse an older attempt when the latest is withheld');
  await db.prepare('INSERT INTO submissions VALUES(?,?,?,?,?,?,?,?)').run('legacy_test',user.id,t.id,t.version,JSON.stringify(answers),'[]',JSON.stringify(t),'2026-10-01T12:15:00Z');
  const legacy=await ensureGuidance(user);
  assert(legacy.analysis.recommendations.length>0,'Legacy attempts use their saved instrument and answers');
@@ -77,7 +79,7 @@ try{
   const privateDir=mkdtempSync(resolve(tmpdir(),'rv360-http-'));
   const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3026'],{env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
     IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),
-    ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:'synthetic-not-used',
+    ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:'',
     SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM:'',SMTP_SECURE:'',
     API_ORIGIN:'',VERCEL:'',NEXT_PUBLIC_DESIGN_PREVIEW:''},stdio:'pipe',windowsHide:true});
   const stopped=new Promise(resolve=>{child.once('exit',resolve);child.once('error',resolve);});
@@ -105,6 +107,10 @@ try{
    const unchanged=await (await request('session',null,cookie)).json();assert.equal(unchanged.values['rv360:profile'].specialty,'Informática','Invalid updates cannot alter persisted profile');
    const adminLogin=await request('auth/login',{email:'admin@example.test',password,admin:true});assert.equal(adminLogin.status,200);
    const adminCookie=adminLogin.headers.get('set-cookie').split(';')[0];
+   const aiStatus=await request('admin/orientation-content',null,adminCookie);assert.equal(aiStatus.status,200);assert.equal((await aiStatus.json()).configured,false);
+   assert.equal((await request('admin/orientation-content',{},adminCookie)).status,503);
+   assert.equal((await request('admin/orientation-content',null,cookie)).status,403);
+   console.log('PASS HTTP AI: protected administrator status and actionable missing-credential response without provider calls.');
    const refreshed=await request('reports/guidance',{studentId:user.id},adminCookie);assert.equal(refreshed.status,200);assert.equal((await refreshed.json()).analysis.pathway.profile.specialty,'Informática');
    assert.equal((await fetch(base+'/mi-ruta/resultados',{headers:{Cookie:cookie}})).status,200);
    assert.equal((await fetch(base+'/admin/resultados',{headers:{Cookie:adminCookie}})).status,200);
