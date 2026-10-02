@@ -64,7 +64,9 @@ npm start
 ```
 
 El arranque comprueba la configuración, aplica migraciones y crea el administrador solamente
-si todavía no existe. Usa las variables `ADMIN_*` e `INSTITUTION_*`. Retira `ADMIN_PASSWORD`
+si todavía no existe. La preparación se ejecuta desde `instrumentation.ts`, también
+cuando el alojamiento inicia Next.js directamente sin pasar por `npm start`.
+Usa las variables `ADMIN_*` e `INSTITUTION_*`. Retira `ADMIN_PASSWORD`
 tras la primera instalación. Reiniciar nunca limpia ni reemplaza datos existentes.
 
 Para desarrollo con tu MySQL configurado: `npm run dev`.
@@ -72,6 +74,46 @@ Para comprobar el primer inicio: `npm run db:check-initial` (un administrador y 
 Los catálogos de evaluación y orientación son contenido del sistema, no registros de alumnos ficticios.
 
 ## Comprobar el despliegue
+
+Antes de publicar, ejecuta `npm test` (22 suites aisladas), `npm run build` y
+`npm run test:integration`. La integración usa SQLite temporal por defecto;
+con `GUIDANCE_DB_DRIVER=mysql` exige una base MySQL local terminada en `_test`.
+`npm run test:startup` comprueba el arranque real, el puerto y la conservación del
+administrador al reiniciar por ambos caminos (`next start` y `npm start`); requiere una base MySQL local **nueva** terminada en
+`_test`, con sus variables `DB_*`. No uses cuentas ni bases de producción.
+El workflow `.github/workflows/verify.yml` prepara estas comprobaciones en Linux
+con Node.js 24, instalación sin dependencias de desarrollo y MySQL 8.
+
+Si hPanel indica `Completed` pero el dominio responde HTTP 500, consulta
+**Runtime logs**. Ese estado confirma la compilación, no la disponibilidad del
+backend. El comando `verify:deployment` muestra el estado HTTP observado.
+No vuelvas a desplegar los mismos valores de ejemplo: completa las variables
+privadas de `.env.example` en hPanel y conserva los mensajes de error del arranque.
+
+### Error `ENOTFOUND REEMPLAZAR_HOST_MYSQL`
+
+Este error indica que quedó el nombre de ejemplo en las variables del servidor.
+No se resuelve compilando otra vez con las mismas variables ni cambiando a SQLite.
+
+1. En las variables privadas de la aplicación, configura `DB_DRIVER=mysql` y los
+   valores reales de `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`
+   proporcionados para tu base MySQL. No supongas que el host es el dominio web.
+2. Revisa también `DATABASE_URL`: si existe, tiene prioridad sobre `DB_HOST` y las
+   demás variables de conexión. Corrígela o retírala para utilizar las variables
+   `DB_*`. Nunca incluyas la conexión ni contraseñas en archivos públicos.
+3. Completa las demás variables de `.env.example` y ejecuta `npm run check:production`
+   **en el entorno del alojamiento**. La comprobación no conecta a MySQL y no imprime
+   credenciales. `npm run db:check` comprueba una instalación ya migrada.
+4. Publica el código actualizado con Node.js 24, compilación `npm run build` e inicio
+   `npm start`. Este inicio aplica las migraciones y prepara el administrador en la
+   primera instalación. La instrumentación también prepara MySQL con un `next start` directo.
+5. Comprueba `npm run verify:deployment -- https://rutavocacional360.com`. Solo una
+   respuesta saludable de MySQL y el rechazo del acceso administrativo anónimo
+   confirman las comprobaciones de disponibilidad; `Completed` por sí solo no basta.
+
+La conexión ahora rechaza valores de ejemplo antes de crear el pool, incluso si se
+inicia Next directamente. El arranque muestra qué configuración revisar ante fallos
+de DNS, conexión, credenciales o permisos; no sustituye los datos reales del alojamiento.
 
 Consulta [la instalación y traslado de la base de datos](database/INSTALACION.md).
 `db:check` verifica también tablas, columnas obligatorias, claves e índices de MySQL

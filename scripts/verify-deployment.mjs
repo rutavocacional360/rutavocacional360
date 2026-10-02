@@ -10,8 +10,12 @@ export async function verifyDeployment(input, request = fetch) {
   if (url.protocol !== 'https:' && !['localhost','127.0.0.1','[::1]'].includes(url.hostname))
     throw Error('La dirección pública debe usar HTTPS.');
   const response = await request(url.origin+'/api/health', {cache:'no-store',redirect:'follow',signal:AbortSignal.timeout(15000)});
-  if ((response.url && new URL(response.url).origin !== url.origin) || !response.ok || !response.headers.get('content-type')?.includes('application/json'))
-    throw Error('No se detectó el backend central. Comprueba que publicaste la aplicación Node.js, no la versión estática de navegador.');
+  if (response.url && new URL(response.url).origin !== url.origin)
+    throw Error('La comprobación fue redirigida a otro dominio. Verifica APP_URL y el dominio conectado.');
+  if (!response.ok)
+    throw Error(`El backend respondió HTTP ${response.status} en /api/health. Revisa Runtime logs de Hostinger: una compilación completada no confirma el arranque ni la conexión MySQL.`);
+  if (!response.headers.get('content-type')?.includes('application/json'))
+    throw Error('La ruta /api/health no devuelve JSON. Comprueba el enrutamiento y que se publicó la aplicación Node.js completa.');
   const health = await response.json();
   if (!health.ok || health.mode !== 'server' || health.database !== 'mysql' || health.registrationReady !== true)
     throw Error('El servidor aún no está listo: debe usar MySQL y tener la institución inicial configurada.');

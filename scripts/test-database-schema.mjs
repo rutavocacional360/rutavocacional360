@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import nextEnv from '@next/env';
 import { verifyDatabaseSchema } from './database-schema.mjs';
+import { assertTestDatabase } from './test-database-target.mjs';
 nextEnv.loadEnvConfig(process.cwd());
 const { createDatabase } = await import('../lib/server/database.ts');
-const name = process.env.DATABASE_URL ? decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.slice(1)) : process.env.DB_NAME;
-if (!name?.endsWith('_test')) throw Error('Esta prueba requiere una base aislada terminada en _test.');
+assertTestDatabase();
 const db = createDatabase({ ...process.env, DB_DRIVER: 'mysql' });
 try {
   await db.migrate();

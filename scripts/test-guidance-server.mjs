@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { assertTestDatabase } from './test-database-target.mjs';
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','guidance-'));
 process.env.DB_DRIVER=process.env.GUIDANCE_DB_DRIVER||'sqlite';
-if(process.env.DB_DRIVER==='mysql'&&(!process.env.DB_NAME?.endsWith('_test')||!['localhost','127.0.0.1'].includes(process.env.DB_HOST)))throw Error('Guidance integration requires an isolated local MySQL database ending in _test.');
+if(process.env.DB_DRIVER==='mysql')assertTestDatabase(process.env,{local:true});
 process.env.DATABASE_PATH=resolve(folder,'guidance_test.sqlite');
 process.env.ACADEMIC_CONTENT_PATH=resolve(folder,'academic_test.json');
 const outfile=resolve(folder,'server.cjs');
@@ -72,7 +74,13 @@ try{
   await db.prepare('UPDATE users SET password=? WHERE id=?').run(passwordHash(password),user.id);
   await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run('admin_test','Admin de prueba','admin@example.test',passwordHash(password),'admin',user.institutionId,'','Activo');
   const base='http://127.0.0.1:3026';
-  const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3026'],{env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false'},stdio:'pipe',windowsHide:true});
+  const privateDir=mkdtempSync(resolve(tmpdir(),'rv360-http-'));
+  const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3026'],{env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
+    IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),
+    ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:'synthetic-not-used',
+    SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM:'',SMTP_SECURE:'',
+    API_ORIGIN:'',VERCEL:'',NEXT_PUBLIC_DESIGN_PREVIEW:''},stdio:'pipe',windowsHide:true});
+  const stopped=new Promise(resolve=>{child.once('exit',resolve);child.once('error',resolve);});
   let startupError=false;child.on('error',()=>{startupError=true;});
   // Consume output without logging application payloads or credentials.
   child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
@@ -128,6 +136,6 @@ try{
     const {runGuidanceVisual}=await import('./test-guidance-visual.mjs');
     await runGuidanceVisual({base,password,folder,schoolPracticeTemplate});
    }
-  }finally{child.kill();await new Promise(r=>child.once('exit',r));}
+  }finally{child.kill();await stopped;}
  }
 }finally{await db.close();}

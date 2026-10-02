@@ -8,6 +8,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import columns from "../../database/columns.json" with { type: "json" };
+import { mysqlConfig } from "./database-config.mjs";
 
 type Scope = {
   connection?: PoolConnection;
@@ -30,37 +31,10 @@ export function createDatabase(env = process.env) {
     readFileSync(resolve("database/" + kind + ".sql"), "utf8");
   const getPool = () => {
     if (pool) return pool;
-    let config: Record<string, any>;
-    if (env.DATABASE_URL) {
-      const url = new URL(env.DATABASE_URL);
-      if (url.protocol !== "mysql:")
-        throw Error("DATABASE_URL debe usar mysql://.");
-      config = {
-        host: url.hostname,
-        port: Number(url.port || 3306),
-        user: decodeURIComponent(url.username),
-        password: decodeURIComponent(url.password),
-        database: decodeURIComponent(url.pathname.slice(1)),
-      };
-    } else
-      config = {
-        host: env.DB_HOST,
-        port: Number(env.DB_PORT || 3306),
-        user: env.DB_USER,
-        password: env.DB_PASSWORD,
-        database: env.DB_NAME,
-      };
-    if (!config.host || !config.user || !config.database)
-      throw Object.assign(
-        Error(
-          "Configura DB_HOST, DB_USER, DB_PASSWORD y DB_NAME en el servidor.",
-        ),
-        { status: 503 },
-      );
+    const config = mysqlConfig(env);
     pool = mysql.createPool({
       ...config,
       waitForConnections: true,
-      connectionLimit: Number(env.DB_POOL_SIZE || 5),
       queueLimit: 100,
       connectTimeout: 10000,
       charset: "utf8mb4",

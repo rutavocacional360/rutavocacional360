@@ -1,4 +1,5 @@
 import { mailConfig } from "../lib/server/mail-config.mjs";
+import { mysqlConfig } from "../lib/server/database-config.mjs";
 import { isAbsolute, resolve, relative, dirname, basename, sep } from 'node:path';
 import { existsSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -21,19 +22,9 @@ export function validateProductionConfig(env, root = process.cwd()) {
   if (env.DB_DRIVER !== 'mysql') errors.push('DB_DRIVER debe ser mysql.');
   if (env.NEXT_PUBLIC_DESIGN_PREVIEW === 'true' || env.API_ORIGIN || env.VERCEL)
     errors.push('Hostinger debe ejecutar el backend central, sin modo de demostración, API_ORIGIN ni VERCEL.');
-  if (env.DATABASE_URL) {
-    try {
-      const url = new URL(env.DATABASE_URL);
-      if (url.protocol !== 'mysql:' || !url.hostname || !url.username || !url.password || url.pathname.length < 2 || url.search || url.hash)
-        throw Error();
-      required('DATABASE_URL');
-    } catch { errors.push('DATABASE_URL no es una conexión MySQL completa.'); }
-  } else {
-    for (const key of ['DB_HOST','DB_NAME','DB_USER','DB_PASSWORD']) required(key);
-  }
-  const port = Number(env.DB_PORT || 3306), pool = Number(env.DB_POOL_SIZE || 5);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) errors.push('DB_PORT no es válido.');
-  if (!Number.isInteger(pool) || pool < 1 || pool > 50) errors.push('DB_POOL_SIZE debe estar entre 1 y 50.');
+  let database;
+  try { database = mysqlConfig(env); }
+  catch (error) { errors.push(error.message); }
   required('APP_URL');
   try {
     const url = new URL(env.APP_URL), local = ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
@@ -41,7 +32,7 @@ export function validateProductionConfig(env, root = process.cwd()) {
       throw Error();
     if (!local && (url.protocol !== 'https:' || env.COOKIE_SECURE !== 'true'))
       errors.push('El sitio público necesita HTTPS y COOKIE_SECURE=true.');
-    if (!local && /_test$/.test(env.DATABASE_URL ? new URL(env.DATABASE_URL).pathname : (env.DB_NAME || '')))
+    if (!local && /_test$/.test(database?.database || ''))
       errors.push('La base de pruebas no debe utilizarse para el sitio público.');
   } catch { errors.push('APP_URL debe contener únicamente el origen del sitio.'); }
   required('GEMINI_API_KEY');

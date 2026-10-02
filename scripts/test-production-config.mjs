@@ -8,5 +8,8 @@ assert.equal(validateProductionConfig(valid).warnings.length,1);
 assert(validateProductionConfig({...valid,NEXT_PUBLIC_GEMINI_API_KEY:'synthetic-secret'}).errors.length);
 for(const change of [{DB_DRIVER:'sqlite'},{DB_PASSWORD:'REEMPLAZAR'},{APP_URL:'http://ruta.example'},{COOKIE_SECURE:'false'},{APP_URL:'https://ruta.example/path'},{DB_NAME:'ruta_test'},{DB_PORT:'0'},{DB_POOL_SIZE:'NaN'},{GEMINI_API_KEY:''},{IMPORT_PATH:'relative'},{PROFILE_PHOTO_PATH:resolve('public/photos')},{IMPORT_PATH:outside+'/public_html/imports'},{NEXT_PUBLIC_DESIGN_PREVIEW:'true'},{API_ORIGIN:'https://external.example'},{VERCEL:'1'},{SMTP_HOST:'mail.example'},{DATABASE_URL:'mysql://name:password@localhost/database?multipleStatements=true'},{DATABASE_URL:'mysql://name:password@localhost/ruta_test'}])assert(validateProductionConfig({...valid,...change}).errors.length,JSON.stringify(Object.keys(change)));
 assert.equal(validateProductionConfig({...valid,DATABASE_URL:'mysql://user:synthetic@localhost/ruta'}).errors.length,0);
+assert(validateProductionConfig({...valid,DATABASE_URL:'mysql://user:synthetic@localhost/ruta%5Ftest'}).errors.some(error=>error.includes('base de pruebas')));
+assert(validateProductionConfig({...valid,DATABASE_URL:'mysql://user:%52EEMPLAZAR@localhost/ruta'}).errors.length);
+assert.equal(validateProductionConfig({...valid,DATABASE_URL:'mysql://user:synthetic@localhost/ruta',DB_PORT:'invalid-but-unused'}).errors.length,0);
 assert.equal(validateProductionConfig({...valid,DB_NAME:'ruta_test',APP_URL:'http://127.0.0.1:3022',COOKIE_SECURE:'false'}).errors.length,0);
 console.log('PASS production config: MySQL, secrets placeholders, HTTPS/cookies, private persistent paths, demo/proxy rejection, QA database isolation, pool/port and SMTP completeness.');

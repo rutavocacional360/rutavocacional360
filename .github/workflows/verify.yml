@@ -1,0 +1,56 @@
+name: Verify Node.js deployment
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: isolated-ci-password
+          MYSQL_DATABASE: rv360_ci_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pisolated-ci-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --omit=dev
+      - run: npm test
+      - run: npm run build
+      - name: MySQL schema and authenticated HTTP workflows
+        env:
+          DB_DRIVER: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: isolated-ci-password
+          DB_NAME: rv360_ci_test
+          GUIDANCE_DB_DRIVER: mysql
+          GUIDANCE_DB_FAULT_TEST: 'true'
+        run: |
+          npm run test:mysql
+          npm run test:database-schema
+          npm run test:integration
+      - name: Hostinger first startup and restart
+        env:
+          DB_DRIVER: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: isolated-ci-password
+          DB_NAME: rv360_startup_test
+        run: |
+          node --input-type=module -e "import mysql from 'mysql2/promise'; const c=await mysql.createConnection({host:process.env.DB_HOST,user:process.env.DB_USER,password:process.env.DB_PASSWORD}); await c.query('CREATE DATABASE rv360_startup_test'); await c.end();"
+          npm run test:startup

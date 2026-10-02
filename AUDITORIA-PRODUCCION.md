@@ -2,7 +2,71 @@
 
 Fecha: 1 de octubre de 2026.
 
-## Resultado verificado
+## Revisión del despliegue actual — 1 de octubre de 2026
+
+El registro aportado por el usuario confirma `getaddrinfo ENOTFOUND
+REEMPLAZAR_HOST_MYSQL` durante `instrumentation.register`: el alojamiento intenta
+resolver un host de ejemplo. La comprobación actual de `/api/health` sigue devolviendo
+HTTP 500. Las otras rutas también devolvieron HTTP 500 en la revisión anterior.
+No se publicó esta revisión ni se modificaron credenciales o datos del alojamiento.
+Falta sustituir allí la configuración MySQL real, comprobar `DATABASE_URL` (tiene
+prioridad sobre `DB_*`) y desplegar con el inicio `npm start`.
+
+Correcciones y comprobaciones de esta revisión del registro:
+
+- Validación MySQL compartida entre la conexión y el comprobador de producción:
+  detecta valores de ejemplo, campos ausentes, URLs incompletas, escapes inválidos,
+  puertos, tamaño del pool y SSL antes de abrir conexiones, incluso con Next directo.
+- Arranque con mensajes accionables de DNS, conexión y autenticación, sin volcar
+  credenciales ni dejar un rechazo de promesa sin gestionar en el script de inicio.
+- Se corrige la validación de nombres de bases `_test` codificados en `DATABASE_URL`;
+  se valida el puerto de la conexión efectiva, respetando su prioridad.
+- Compilación con Node.js 24.21.0 y TypeScript aprobada; 22/22 suites aisladas
+  aprobadas. La nueva regresión prueba el error original antes de DNS y comprueba
+  que el script de inicio termina con código 1 y diagnóstico legible.
+- `npm audit --omit=dev`: cero vulnerabilidades conocidas. Verificación de secretos
+  en recursos públicos aprobada.
+- Prueba del visor PDF aprobada: contenido de canvas, paginación, zoom, recuperación
+  de errores, URL blob y anchos de 320, 360, 390, 768 y 1280 píxeles.
+- MySQL 8 en una instancia nueva y aislada: migraciones, 21 tablas, transacciones,
+  registro concurrente y rollback, seguridad HTTP, estudiantes/administradores,
+  perfiles persistidos, orientación y simuladores aprobados.
+- Recorrido visual automatizado aprobado en escritorio/móvil, incluidos registro,
+  formularios, informes, vista PDF, diálogo de carrera y administración. Evidencias
+  locales privadas: `.qa-tools/guidance-wTP2sn/`; se inspeccionaron también capturas
+  de resultados móviles y del visor PDF de escritorio.
+- Inicio real mediante el script de Hostinger aprobado con otra base vacía:
+  migración, creación del administrador, puerto por argumento y reinicio sin
+  `ADMIN_PASSWORD`, conservando el usuario y su contraseña.
+
+Verificado en la revisión local previa:
+
+- Compilación completa con Node.js 24.14.0, Next.js 16.3.8 y TypeScript activo.
+- `npm test`: 21/21 suites aprobadas. Se repararon la prueba de despliegue que
+  aún esperaba Vercel/proxy y la resolución TypeScript de importación documental.
+- MySQL 8 aislado: esquema de 21 tablas, migraciones repetibles, transacciones,
+  rollback, Unicode, concurrencia, claves foráneas y consultas parametrizadas.
+- Integración HTTP con MySQL: estudiantes y administrador, registro concurrente,
+  rollback del registro, perfiles, informes, permisos, sesiones, recuperación de
+  contraseña, protección CSRF, limitación de solicitudes y simuladores escolares.
+- Verificación de secretos en recursos públicos aprobada; `npm audit --omit=dev`
+  informó cero vulnerabilidades conocidas.
+- Arranque real con MySQL aislado: migración, creación del administrador, puerto
+  transmitido por línea de comandos y reinicio sin ADMIN_PASSWORD, conservando
+  el identificador y la contraseña inicial del administrador.
+
+Correcciones adicionales: el arranque transmite los argumentos de puerto a Next;
+las pruebas validan la base efectiva de DATABASE_URL antes de escribir; el
+verificador distingue HTTP 500/503 de una respuesta no JSON; la prueba HTTP
+libera el proceso incluso cuando el servidor falla durante el arranque.
+Se añadió un workflow de verificación en Linux; su ejecución remota está pendiente.
+
+La revisión anterior encontró valores de ejemplo en el archivo privado preparado
+para Hostinger. En el entorno local activo no hay una conexión de producción
+configurada; los registros aportados confirman el host de ejemplo remoto. El envío real de correo,
+la IA externa y la persistencia del almacenamiento remoto siguen sin verificarse.
+
+## Resultado de la revisión anterior
 
 El código compiló correctamente con Node.js 24.21.0 y Next.js 16.3.8, incluida la
 comprobación de TypeScript. La instalación reproducible con `npm ci --include=dev`
@@ -55,9 +119,10 @@ Se deben comprobar allí MySQL, HTTPS, permisos y persistencia de archivos, domi
 envío SMTP y disponibilidad del proveedor de IA. SMTP no estaba configurado durante
 esta revisión; no se validó el envío real de recuperación por correo.
 
-Esta revisión no incluye una nueva inspección visual de todas las pantallas, pruebas
-de carga ni certificación de accesibilidad. El aviso de error de vista previa PDF
-registrado en la documentación anterior debe verificarse en el recorrido de resultados.
+Esta revisión no incluye pruebas de carga ni certificación de accesibilidad. El
+recorrido visual cubre las pantallas descritas arriba, no todas las combinaciones
+posibles. La vista previa PDF se verificó en el recorrido de resultados y en su
+prueba específica, sin reproducir el error registrado en la documentación anterior.
 
 ## Reproducción
 
@@ -70,3 +135,24 @@ registrado en la documentación anterior debe verificarse en el recorrido de res
 
 Los scripts de integración que escriben datos requieren una base aislada de pruebas;
 nunca deben ejecutarse sobre datos de usuarios reales.
+
+
+## Corrección del arranque administrado — 1 de octubre de 2026
+
+La preparación de MySQL ahora se ejecuta desde `instrumentation.ts` mediante
+`scripts/prepare-hostinger.mjs`. Así también se aplican las migraciones, se verifica
+el esquema y se crea el administrador inicial cuando el proveedor ejecuta Next.js
+directamente. `npm start` conserva el puerto indicado y delega en ese mismo arranque.
+La excepción SQLite queda limitada a pruebas con URL local y archivo `_test.sqlite`.
+
+Validación local: 22 suites aprobadas; compilación Webpack, TypeScript y comprobación
+de secretos aprobadas; MySQL 8 aislado con primer arranque directo, reinicio mediante
+el wrapper y nuevo reinicio directo sin cambiar credenciales. Se verificaron 21 tablas,
+migraciones repetibles, transacciones y los flujos HTTP de seguridad y simuladores.
+No se utilizaron bases de usuarios reales ni se enviaron correos durante estas pruebas.
+
+La consulta de solo lectura a `https://rutavocacional360.com/api/health` devolvió HTTP
+500 durante esta revisión. Los registros aportados muestran un host MySQL de ejemplo.
+Esta corrección local no sustituye los datos reales de conexión en hPanel y no se ha
+publicado desde esta revisión. Pendiente: publicar los cambios, configurar MySQL real
+y confirmar disponibilidad, almacenamiento persistente, SMTP e IA en Hostinger.

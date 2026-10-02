@@ -1,8 +1,12 @@
 ﻿import assert from 'node:assert/strict';
 import {parseHTML} from 'linkedom';
-import {readDocumentMarkup,proposeTests} from '../components/kit/lib/import-content.ts';
-import {extractFile} from '../lib/server/importer.ts';
 import {readFileSync} from 'node:fs';
+import {build} from 'esbuild';
+import {createRequire} from 'node:module';
+const bundled = await build({stdin:{contents:"export {readDocumentMarkup,proposeTests} from './components/kit/lib/import-content'; export {extractFile} from './lib/server/importer';",resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,platform:'node',format:'cjs',packages:'external'});
+const bundledModule = {exports:{}};
+new Function('require','module','exports',bundled.outputFiles[0].text)(createRequire(import.meta.url),bundledModule,bundledModule.exports);
+const {readDocumentMarkup,proposeTests,extractFile} = bundledModule.exports;
 const markup='<h1>Cuestionario de prueba</h1><p>Sección A. Datos</p><ol><li>Primera pregunta</li></ol><ul><li>Opción uno</li><li>Opción dos<ol><li>Elige hasta tres opciones.</li></ol></li><li>A</li><li>B</li><li>C</li></ul><p>Sección B. Escala</p><table><tr><td>Valor</td><td>Respuesta</td></tr><tr><td>1</td><td>Nunca</td></tr><tr><td>2</td><td>Siempre</td></tr></table><table><tr><td>N.°</td><td>Enunciado</td><td>1</td><td>2</td></tr><tr><td>3</td><td>Me gusta aprender.</td><td></td><td></td></tr></table><p>Nota para la aplicación: revisar con especialistas.</p><script>globalThis.__importExecuted=true;</script>';
 const parsed=readDocumentMarkup(parseHTML('<html><body>'+markup+'</body></html>').document),tests=proposeTests(parsed.text,parsed.embedded,'fixture.html'),t=tests[0];assert.equal(t.questions.length,3);assert.equal(t.questions[0].options.length,2);assert.equal(t.questions[1].type,'multiple');assert.equal(t.questions[1].maxSelections,3);assert.equal(t.questions[2].type,'likert');assert.equal(t.questions[2].options[1].label,'Siempre');assert.equal(t.scoring,'manual');assert.equal(globalThis.__importExecuted,undefined);assert(!t.questions.some(q=>q.text.includes('Nota para')));
 const html=await extractFile(Buffer.from('<fieldset><legend>Mi pregunta</legend><label><input type="radio">Sí</label><label><input type="radio">No</label></fieldset>'),'form.html');assert.equal(proposeTests(html.text,html.embedded,'form.html')[0].questions[0].options.length,2);

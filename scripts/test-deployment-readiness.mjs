@@ -8,5 +8,8 @@ for(const value of [{...health,database:'sqlite'},{...health,registrationReady:f
 await assert.rejects(verifyDeployment('https://ruta.example',async()=>new Response('static',{status:404})));
 await assert.rejects(verifyDeployment('https://ruta.example',async()=>new Response('<html/>',{headers:{'Content-Type':'text/html'}})));
 await assert.rejects(verifyDeployment('https://ruta.example',simulate(health,200)));
+await assert.rejects(verifyDeployment('https://ruta.example',async()=>new Response('Internal Server Error',{status:500})),/HTTP 500.*Runtime logs/);
+await assert.rejects(verifyDeployment('https://ruta.example',async()=>Response.json({ok:false},{status:503})),/HTTP 503/);
+await assert.rejects(verifyDeployment('https://ruta.example',async()=>({url:'https://other.example/api/health'})),/otro dominio/);
 for(const url of ['http://ruta.example','https://u:secret@ruta.example','https://ruta.example/admin','https://ruta.example?token=x'])await assert.rejects(verifyDeployment(url,simulate(health)));
 console.log('PASS deployment verification: MySQL ready, protected admin, rejects static/SQLite/unconfigured deployments and unsafe URLs; read-only.');

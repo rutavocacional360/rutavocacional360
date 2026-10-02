@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "test:integration": "node scripts/test-guidance-server.mjs --http",
+    "test:startup": "node scripts/test-hostinger-start.mjs",
     "dev": "node scripts/build-workers.mjs && next dev",
     "build": "node scripts/build-workers.mjs && next build --webpack && node scripts/check-client-secrets.mjs",
     "start": "node scripts/start-hostinger.mjs",

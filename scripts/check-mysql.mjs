@@ -1,17 +1,10 @@
 import nextEnv from "@next/env";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { assertTestDatabase } from './test-database-target.mjs';
 nextEnv.loadEnvConfig(process.cwd());
 const { createDatabase } = await import("../lib/server/database.ts");
-const name =
-  process.env.DB_NAME ||
-  (process.env.DATABASE_URL
-    ? new URL(process.env.DATABASE_URL).pathname.slice(1)
-    : "");
-if (!name.endsWith("_test"))
-  throw Error(
-    "Esta prueba requiere una base aislada con nombre terminado en _test.",
-  );
+assertTestDatabase();
 const db = createDatabase({ ...process.env, DB_DRIVER: "mysql" }),
   owner = "qa:" + randomUUID();
 try {
