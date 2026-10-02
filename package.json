@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/build-workers.mjs && next dev",
-    "build": "node scripts/build-workers.mjs && next build && node scripts/check-client-secrets.mjs",
+    "build": "node scripts/build-workers.mjs && next build --webpack && node scripts/check-client-secrets.mjs",
     "start": "node scripts/start-hostinger.mjs",
     "postinstall": "node scripts/prepare-browser-assets.mjs",
     "db:migrate": "node scripts/database.mjs migrate",

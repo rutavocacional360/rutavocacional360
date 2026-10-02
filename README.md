@@ -41,6 +41,11 @@ se incluyen en `dependencies`: Hostinger instala en modo producción y puede omi
 `devDependencies` antes de ejecutar `npm run build`. No cambies el comando de
 compilación para ocultar un fallo ni desactives la comprobación de tipos.
 
+La compilación de producción usa `next build --webpack`, las optimizaciones de
+memoria de Webpack y un trabajador para generar páginas. Esta configuración
+evita depender de Turbopack en el entorno de compilación de Hostinger. Conserva
+la comprobación de TypeScript y la revisión de secretos en los archivos públicos.
+
 - Node.js 24 y MySQL 8.
 - Hostinger con soporte para aplicaciones Node.js/Next.js y MySQL.
 - Una base vacía para el primer despliegue y un directorio privado persistente fuera del código.

@@ -9,6 +9,10 @@ for (const key of Object.keys(process.env)) {
 export default {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  experimental: {
+    cpus: 1,
+    webpackMemoryOptimizations: true,
+  },
   async headers() {
     return [{source: '/:path*', headers: [
       {key:'X-Content-Type-Options', value:'nosniff'},
