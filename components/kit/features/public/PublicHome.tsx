@@ -58,7 +58,7 @@ export function PublicFooter() {
       <nav aria-label="Explora el sitio"><h2>Explora</h2><a href="/#como-funciona">Cómo funciona</a><a href="/#estudiantes">Herramientas</a><a href="/#areas">Áreas de estudio</a><a href="/#instituciones">Para instituciones</a></nav>
       <nav aria-label="Recursos y acceso"><h2>Enlaces útiles</h2><a href="/#preguntas-frecuentes">Preguntas frecuentes</a><Link href="/ingresar">Ingresar a mi cuenta</Link><Link href="/recuperar">Recuperar acceso</Link></nav>
     </div>
-    <div className="site-footer-bottom"><p>© {new Date().getFullYear()} Ruta Vocacional 360°. Orientación académica y profesional.</p><a href="/#inicio">Volver arriba ↑</a></div>
+    <div className="site-footer-bottom"><p>© {new Date().getFullYear()} Ruta Vocacional 360°. Orientación académica y profesional.</p><div className="site-footer-signature"><a className="site-footer-developer" href="https://olbrox-tech.vercel.app/" target="_blank" rel="noopener noreferrer" aria-label="Desarrollo de software por Olbrox Tech (abre una nueva pestaña)"><span>Desarrollo de software</span><img className="site-footer-developer-logo" src="/media/olbrox-tech.png" alt="Olbrox Tech" width={485} height={141} loading="lazy" /></a><a href="/#inicio">Volver arriba ↑</a></div></div>
   </div></footer>;
 }
 
