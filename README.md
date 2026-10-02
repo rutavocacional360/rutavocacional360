@@ -187,6 +187,16 @@ Al terminar, el botón de ingreso dirige al acceso correspondiente al rol de la 
    de SPF/DKIM del dominio en hPanel si el mensaje no llega.
 
 Las claves se configuran solo como variables privadas del servidor, sin `NEXT_PUBLIC_`.
+Si `/recuperar` informa que no pudo enviar el correo, busca `[SMTP]` en **Runtime logs**
+después del intento. El registro muestra únicamente códigos permitidos, el estado SMTP
+y una indicación de qué revisar; no incluye destinatarios, contraseñas ni enlaces.
+`EAUTH` indica autenticación rechazada; `EDNS`, `ECONNECTION` y `ETIMEDOUT` indican
+problemas de resolución o conexión; `EENVELOPE` indica rechazo del remitente o destinatario.
+`npm run check:smtp`, ejecutado con las variables del alojamiento, usa el mismo diagnóstico
+y verifica conexión y autenticación sin enviar mensajes. En Hostinger Email, si el plan
+lo permite, puede usarse una contraseña de aplicación en `SMTP_PASSWORD`:
+[guía de Hostinger](https://www.hostinger.com/support/how-to-create-an-app-password-for-hostinger-email/).
+
 La página antigua de Vercel no se actualiza con estos cambios locales. Publica este proyecto
 y utiliza el nuevo dominio. Las cuentas del antiguo modo navegador no aparecen por sí solas
 en MySQL: deben registrarse en la instalación central o migrarse desde una fuente disponible.
