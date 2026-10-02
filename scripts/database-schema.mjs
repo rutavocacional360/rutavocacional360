@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 
 // Only reads metadata; never repairs or removes tables in an existing installation.
 export async function verifyDatabaseSchema(db) {
   if (db.driver !== 'mysql') throw Error('La comprobación del esquema requiere MySQL.');
-  const sql = readFileSync(new URL('../database/mysql.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(resolve('database/mysql.sql'), 'utf8');
   const expected = [...sql.matchAll(/CREATE TABLE IF NOT EXISTS `([^`]+)` \(([\s\S]*?)\) ENGINE=/g)];
   const [tables, columns, indexes, references, migrations] = await Promise.all([
     db.prepare('SELECT TABLE_NAME name, ENGINE engine, TABLE_COLLATION collation FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()').all(),

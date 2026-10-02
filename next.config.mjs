@@ -9,6 +9,13 @@ for (const key of Object.keys(process.env)) {
 export default {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  outputFileTracingIncludes: {
+    '/*': [
+      './database/mysql.sql', './database/sqlite.sql',
+      './lib/server/data/ecuador-offer.json', './public/data/education-catalog.json',
+      './public/media/brain-book-icon.png', './.runtime/import-worker.cjs',
+    ],
+  },
   experimental: {
     cpus: 1,
     webpackMemoryOptimizations: true,

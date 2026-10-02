@@ -7,8 +7,10 @@ import {join} from 'node:path';
 import {createServer} from 'node:net';
 import {assertTestDatabase} from './test-database-target.mjs';
 import {verifyDeployment} from './verify-deployment.mjs';
+import {createRuntimePackage} from './test-runtime-package.mjs';
 
 assertTestDatabase(process.env,{local:true});
+const runtime = await createRuntimePackage();
 const privateDir=mkdtempSync(join(tmpdir(),'rv360-start-'));
 const listener=createServer();
 await new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',resolve);});
@@ -26,17 +28,22 @@ let initialUser;
 for(const [direct,restart] of [[true,false],[false,true],[true,true]]){
   const command=direct ? ['node_modules/next/dist/bin/next','start','-H','127.0.0.1'] : ['scripts/start-hostinger.mjs'];
   const child=spawn(process.execPath,[...command,'-p',String(port)],{
+    cwd:direct ? runtime : process.cwd(),
     env:{...env,...(restart?{ADMIN_PASSWORD:''}:{})},stdio:'pipe',windowsHide:true});
   const stopped=new Promise(resolve=>{child.once('exit',resolve);child.once('error',resolve);});
-  child.stdout.resume();child.stderr.resume();
+  let output='';
+  const capture=chunk=>{output=(output+chunk.toString()).slice(-8000);};
+  child.stdout.on('data',capture);child.stderr.on('data',capture);
+  const diagnostic=()=>Object.entries(env).reduce((log,[key,value])=>
+    /PASSWORD|SECRET|TOKEN|KEY/i.test(key)&&value ? log.split(value).join('[redacted]') : log,output);
   try{
     let ready=false;
     for(let n=0;n<100;n++){
-      if(child.exitCode!==null)throw Error('Hostinger startup exited before becoming ready');
+      if(child.exitCode!==null)throw Error('Hostinger startup exited before becoming ready\n'+diagnostic());
       try{await verifyDeployment(base);ready=true;break;}catch{}
       await new Promise(resolve=>setTimeout(resolve,200));
     }
-    assert(ready,'Hostinger startup must expose a healthy MySQL backend');
+    assert(ready,'Hostinger startup must expose a healthy MySQL backend\n'+diagnostic());
     const response=await fetch(base+'/api/auth/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({email:env.ADMIN_EMAIL,password:env.ADMIN_PASSWORD,admin:true})});
     assert.equal(response.status,200,'Initial password must survive a restart');
     const {user}=await response.json();
@@ -50,4 +57,4 @@ for(const [direct,restart] of [[true,false],[false,true],[true,true]]){
     await stopped;
   }
 }
-console.log('PASS Hostinger startup: direct Next bootstrap, npm start wrapper, CLI port, MySQL readiness and both restarts without resetting credentials.');
+console.log('PASS Hostinger runtime package without scripts/source/env: first bootstrap, wrapper restart, packaged restart, traced SQL, port, MySQL health and unchanged administrator credentials.');

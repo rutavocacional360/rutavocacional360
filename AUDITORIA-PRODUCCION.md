@@ -156,3 +156,23 @@ La consulta de solo lectura a `https://rutavocacional360.com/api/health` devolvi
 Esta corrección local no sustituye los datos reales de conexión en hPanel y no se ha
 publicado desde esta revisión. Pendiente: publicar los cambios, configurar MySQL real
 y confirmar disponibilidad, almacenamiento persistente, SMTP e IA en Hostinger.
+
+## Incidencia del paquete de ejecución — 2 de octubre de 2026
+
+El despliegue de `fd6e2d9` compiló, pero Hostinger no incluyó
+`scripts/prepare-hostinger.mjs` en su paquete de ejecución. La prueba anterior
+arrancaba desde el repositorio completo y no detectó esta diferencia.
+
+La instrumentación ahora importa la preparación como módulo del servidor compilado.
+La creación del administrador también se importa, sin procesos secundarios ni rutas
+a scripts originales. Los esquemas SQL, los catálogos, la imagen usada en informes
+y el trabajador compilado de importación se incluyen explícitamente en las trazas.
+La prueba de arranque construye un paquete temporal sin scripts, fuentes ni archivos
+de entorno y verifica el primer inicio y un reinicio contra MySQL aislado.
+
+Verificación de esta corrección: compilación y TypeScript aprobados con Node.js
+24.21.0; 22 suites aprobadas; paquete reducido con primer arranque, inicio mediante
+el wrapper y reinicio directo aprobados. MySQL aislado: 21 tablas, transacciones,
+permisos, registro, acceso y simuladores HTTP aprobados. Los datos y la contraseña
+del administrador se conservaron durante los reinicios. La disponibilidad en
+Hostinger debe confirmarse tras desplegar este cambio.

@@ -66,6 +66,9 @@ npm start
 El arranque comprueba la configuración, aplica migraciones y crea el administrador solamente
 si todavía no existe. La preparación se ejecuta desde `instrumentation.ts`, también
 cuando el alojamiento inicia Next.js directamente sin pasar por `npm start`.
+La preparación y la creación del administrador se incluyen en el código compilado;
+el arranque no necesita ejecutar archivos de `scripts/`. Los esquemas SQL se incluyen
+explícitamente en las trazas de despliegue de Next.js.
 Usa las variables `ADMIN_*` e `INSTITUTION_*`. Retira `ADMIN_PASSWORD`
 tras la primera instalación. Reiniciar nunca limpia ni reemplaza datos existentes.
 
@@ -81,6 +84,9 @@ con `GUIDANCE_DB_DRIVER=mysql` exige una base MySQL local terminada en `_test`.
 `npm run test:startup` comprueba el arranque real, el puerto y la conservación del
 administrador al reiniciar por ambos caminos (`next start` y `npm start`); requiere una base MySQL local **nueva** terminada en
 `_test`, con sus variables `DB_*`. No uses cuentas ni bases de producción.
+El primer arranque y el reinicio directo se prueban desde un paquete temporal sin
+`scripts/`, fuentes originales ni archivos `.env`, usando únicamente la compilación, los recursos trazados
+y las dependencias instaladas.
 El workflow `.github/workflows/verify.yml` prepara estas comprobaciones en Linux
 con Node.js 24, instalación sin dependencias de desarrollo y MySQL 8.
 
