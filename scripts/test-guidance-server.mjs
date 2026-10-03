@@ -40,6 +40,13 @@ try{
  assert.equal(first.educationLevel,'bachillerato');assert.equal(first.analysis.pathway.suggested,'ciencias');assert.deepEqual(first.analysis.recommendations,[]);assert.deepEqual(first.catalog,[]);assert.deepEqual(first.offers,{});assert.equal(first.catalogSource.educationLevel,'bachillerato');
  assert(first.readiness.bachillerato.ready);assert.equal(first.readiness.universidad.ready,false);assert.equal(first.readiness.universidad.total,0);assert(first.instruments.every(i=>i.instrument.educationLevel==='bachillerato'));
  assert.equal((await ensureGuidance(user)).id,first.id);
+ const studentView=(await listGuidance(user)).find(report=>report.id===first.id);
+ const refreshedView=await analyzeGuidance(user,{});
+ for(const view of [studentView,refreshedView]){
+  for(const field of ['ai','provider','model','contentSource','promptVersion'])assert(!(field in view),'Student responses must omit '+field);
+  assert.deepEqual(view.analysis,first.analysis,'Recommendations remain available without provider metadata');
+ }
+ assert(first.ai,'Internal reports retain provider status for operations');
  await put(user.id,'rv360:profile',{...profile,baccalaureate:'tecnico',specialty:'Informática',learningPreference:'aplicar'});
  const simultaneous=await Promise.all([ensureGuidance(user),ensureGuidance(user),ensureGuidance(user)]);
  const second=simultaneous[0];
@@ -54,6 +61,7 @@ try{
  await assert.rejects(analyzeGuidance({...admin,role:'orientador',group:'B'},{studentId:user.id}),e=>e.status===403);
  assert.equal((await listGuidance({...admin,institutionId:'other_test'})).length,0);
  assert((await listGuidance(admin)).some(r=>r.id===first.id),'Historical snapshots retained');
+ assert((await listGuidance(admin)).find(r=>r.id===first.id).ai,'Administrators retain diagnostic access');
  const revisedAnswers=Object.fromEntries(t.questions.map(q=>[q.id,q.dimension==='R'?5:2]));
  const revision=calculateTest(t,revisedAnswers);
  await db.prepare('INSERT INTO assessment_results VALUES(?,?,?,?,?,?)').run('science_test',2,JSON.stringify(revision),'{}',null,'2026-10-01T12:05:00Z');
@@ -80,7 +88,7 @@ try{
  writeFileSync(resolve(folder,'report.json'),JSON.stringify(second));
  console.log('PASS server: separate school/university routes, graduation requires new university assessments, persisted profile, digest updates after review, authorized history and withheld results.');
  console.log('PDF fixture: '+pdfPath);
- if(process.argv.includes('--http')||process.argv.includes('--visual')){
+ if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')){
   await db.prepare('DELETE FROM assessment_results WHERE submission_id=?').run('pending_test');
   await db.prepare('DELETE FROM submissions WHERE id=?').run('pending_test');
   const password=randomBytes(24).toString('base64url');
@@ -158,6 +166,10 @@ try{
    if(process.argv.includes('--visual')){
     const {runGuidanceVisual}=await import('./test-guidance-visual.mjs');
     await runGuidanceVisual({base,password,folder,schoolPracticeTemplate});
+   }
+   if(process.argv.includes('--admin-visual')){
+    const {runAdminImportVisual}=await import('./test-admin-import-visual.mjs');
+    await runAdminImportVisual({base,password,folder});
    }
   }finally{child.kill();await stopped;}
  }

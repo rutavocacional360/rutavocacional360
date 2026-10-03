@@ -30,6 +30,9 @@ try {
  assert((await api.currentAssessments(user)).every(t=>t.educationLevel==='bachillerato'));
  const blank={id:'',version:0,revision:0,status:'published',title:'',instrument:{id:'qa',version:'1',title:'',description:'',options:[],questions:[]},purpose:'general',modes:['practice','exam'],durationMinutes:30,maxAttempts:3,gradePolicy:'last',feedback:'finish',selection:'fixed',quotas:[],areaWeights:[],questions:[],shuffleOptions:false,questionOrderFixedIds:[]};
  const simulator=await saveTraining(admin,'simulator',api.schoolPracticeTemplate(blank,'ciencias'));
+ for(const patch of [{careerIds:['bachillerato:ciencias','software']},{educationLevel:'universidad',careerIds:['bachillerato:ciencias']}]){
+  await assert.rejects(saveTraining(admin,'simulator',{...blank,title:'Invalid draft',status:'draft',...patch}),/Separa|nivel debe coincidir/);
+ }
  const course=await saveTraining(admin,'course',{id:'',version:0,revision:0,status:'published',title:'Curso Ciencias QA',description:'Preparación',objectives:'Practicar',level:'Inicial',type:'general',careerIds:['bachillerato:ciencias'],fields:[],institutions:[],studentIds:[],access:'all',activities:[{id:'activity',module:'QA',title:'Práctica',kind:'simulator',content:'',required:true,completion:'submit',simulatorId:simulator.id,simulatorVersion:simulator.version}]});
  const locked=async()=>{
   const state=await trainingState(user);

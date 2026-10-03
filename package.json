@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "test": "node scripts/run-tests.mjs",
+    "test:ai:live": "node scripts/test-ai-live.mjs",
+    "test:admin:visual": "node scripts/test-guidance-server.mjs --admin-visual",
     "test:integration": "node scripts/test-guidance-server.mjs --http",
     "test:startup": "node scripts/test-hostinger-start.mjs",
     "dev": "node scripts/build-workers.mjs && next dev",

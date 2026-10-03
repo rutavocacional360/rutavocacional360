@@ -9,6 +9,13 @@ assert.deepEqual(result.careerIds,['software']);assert.equal(result.durationMinu
 assert.equal(applySimulatorSuggestions(base,suggestion,[],true).durationMinutes,45);
 for(const q of [{id:'a',correctValues:[999]},{id:'a',correctValues:[10,20]},{id:'a',correctValues:[10],issue:'Ambiguous'}])assert.equal(applySimulatorSuggestions(base,{questions:[q]},[]).questions[0].correctValues,undefined);
 assert.deepEqual(applySimulatorSuggestions(base,{questions:[]},[]).questions,base.questions);
+const mixedCatalog=[{id:'software',name:'Software'},{id:'bachillerato:informatica',name:'Informática'}];
+const mixedSuggestion={...suggestion,careerIds:mixedCatalog.map(c=>c.id)};
+assert.deepEqual(applySimulatorSuggestions({...base,educationLevel:'bachillerato'},mixedSuggestion,mixedCatalog).careerIds,['bachillerato:informatica']);
+assert.deepEqual(applySimulatorSuggestions({...base,educationLevel:'universidad'},mixedSuggestion,mixedCatalog).careerIds,['software']);
+const partialPresentation={...base,title:' ',instrument:{...base.instrument,description:' ',presentation:{title:'Título conservado',summary:''}}};
+const completedPresentation=applySimulatorSuggestions(partialPresentation,{...suggestion,instructions:'Instrucciones nuevas'},[]);
+assert.equal(completedPresentation.title,'Brief');assert.equal(completedPresentation.instrument.presentation.title,'Título conservado');assert.equal(completedPresentation.instrument.presentation.summary,'Summary');assert.equal(completedPresentation.instrument.description,'Instrucciones nuevas');
 console.log('PASS AI merge: preserves source/keys/weights, validates options and careers, retains review, handles uncertainty.');
 
 (async()=>{
@@ -18,6 +25,13 @@ console.log('PASS AI merge: preserves source/keys/weights, validates options and
   const done=await autofillSimulator(base,[],false,m=>progress.push(m));assert.equal(calls,2);assert.deepEqual(done.simulator.questions[0].correctValues,[10]);assert(progress.some(p=>p.includes('Reintentando')));
   calls=0;global.fetch=async()=>{calls++;return new Response('{}',{status:401});};const expired=await autofillSimulator(base,[]);assert.equal(calls,1);assert(expired.message.includes('sesión'));assert.deepEqual(expired.simulator,base);
   calls=0;global.fetch=async()=>{calls++;throw Error('Should not request');};const ready=await autofillSimulator({...done.simulator,careerIds:['software']},[]);assert.equal(calls,0);
+  calls=0;const completeQuestions={...done.simulator,careerIds:['software'],instrument:{...done.simulator.instrument,presentation:{title:'Título manual',summary:''},description:' '}};
+  global.fetch=async()=>{calls++;return new Response(JSON.stringify({suggestions:{...suggestion,instructions:'Instrucciones propuestas'}}));};
+  const metadata=await autofillSimulator(completeQuestions,mixedCatalog);assert.equal(calls,1,'Complete answers must not skip missing presentation and instructions');
+  assert.equal(metadata.simulator.instrument.presentation.title,'Título manual');assert.equal(metadata.simulator.instrument.presentation.summary,'Summary');assert.equal(metadata.simulator.instrument.description,'Instrucciones propuestas');
+  assert.deepEqual(metadata.simulator.questions,completeQuestions.questions,'Completing metadata must preserve existing keys and explanations');
+  calls=0;global.fetch=async()=>{calls++;return new Response(JSON.stringify({error:'Configuración pendiente',code:'AI_CONFIG'}),{status:503});};
+  await autofillSimulator(base,[]);assert.equal(calls,1,'Configuration failures do not consume retries');
   console.log('PASS transient retry, progress, expired session and no regeneration of complete questions.');
  }finally{global.fetch=original;}
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -9,7 +9,7 @@ const folder=mkdtempSync(resolve('.qa-tools','student-ai-'));
 process.env.DB_DRIVER='sqlite';
 process.env.DATABASE_PATH=resolve(folder,'private-cache.sqlite');
 const outfile=resolve(folder,'student-ai.cjs');
-await build({stdin:{contents:`export * from './lib/server/student-guidance-ai'; export {db,document} from './lib/server/store';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
+await build({stdin:{contents:`export * from './lib/server/student-guidance-ai'; export * from './lib/server/ai-diagnostics'; export {db,document} from './lib/server/store';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
  plugins:[{name:'server-marker',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
 const api=createRequire(import.meta.url)(outfile);
 const env={GEMINI_API_KEY:'synthetic-guidance-key',GEMINI_MODEL:'mock-model'};
@@ -43,6 +43,8 @@ try {
   assert.deepEqual(input.instruments.map(item=>item.id),['school-interest']);
   assert(payload.generationConfig.responseJsonSchema.properties.reasons.items.properties.candidateId.enum.includes('modalidad:tecnico'));
   assert(!payload.generationConfig.responseJsonSchema.properties.reasons.items.properties.candidateId.enum.includes('software'));
+  assert(!('enum' in payload.generationConfig.responseJsonSchema.properties.reasons.items.properties.evidence.items),'Evidence grammar stays bounded as tests grow; validation remains on the server');
+  assert(!('minLength' in payload.generationConfig.responseJsonSchema.properties.summary));
   assert.equal(request.headers['x-goog-api-key'],env.GEMINI_API_KEY);
   return response(schoolResult);
  }};
@@ -70,12 +72,15 @@ try {
   {...schoolResult,summary:'Explora Universidad y carreras universitarias recomendadas.'},
   {...schoolResult,summary:'Tus respuestas indican una afinidad del 99% con la especialidad.'},
   {...schoolResult,extra:'must not exist'},
+  {...schoolResult,summary:'La IA recomienda explorar estas opciones según tus intereses.'},
+  {...schoolResult,reasons:[{...schoolResult.reasons[0],reason:'Gemini recomienda esta modalidad según los resultados.'}]},
+  {...schoolResult,nextSteps:['Revisa la credencial del servidor para continuar.','Compara las asignaturas y realiza una actividad práctica.']},
   {...schoolResult,nextSteps:['Una sola acción no completa el informe.']},
  ];
  for(const value of tampered){const invalid=await run(value);assert.equal(invalid.status,'error');assert.equal(invalid.source,'local');assert.equal(invalid.error.code,'AI_VALIDATION');assert(!invalid.summary,'An invalid provider response must not appear as a student result');}
  assert.equal((await run({...universityResult,summary:'Primero elige Bachillerato Técnico como especialidad.'},{educationLevel:'universidad'})).error.code,'AI_VALIDATION');
  assert.equal((await run({...schoolResult,summary:'Esta orientación describe tus intereses y no certifica aptitud ni garantiza éxito.'})).status,'available','Honest caveats must not invalidate a provider answer');
- for(const [status,code] of [[401,'AI_CONFIG'],[403,'AI_CONFIG'],[429,'AI_LIMIT'],[503,'AI_PROVIDER']]){
+ for(const [status,code] of [[400,'AI_REQUEST'],[401,'AI_CONFIG'],[403,'AI_CONFIG'],[404,'AI_CONFIG'],[429,'AI_LIMIT'],[503,'AI_PROVIDER']]){
   let attempts=0;const failed=await run(null,{request:async()=>{attempts++;return new Response('{}',{status});}});
   assert.equal(failed.status,'error');assert.equal(failed.error.code,code);assert.equal(attempts,status===503?2:1,'Retries are bounded and do not retry quota or bad keys');
  }
@@ -101,5 +106,27 @@ try {
  const nestedReport=structuredClone(report);nestedReport.instruments[0].scores[0].value=22;
  const nested=await api.db.transaction(()=>api.analyzeStudentGuidance(nestedReport,{...persistentOptions,env:{...env,AI_GUIDANCE_DAILY_REQUEST_LIMIT:'2'}}));
  assert.equal(nested.status,'available','Budget reservation must support callers already inside an enrollment transaction');assert.equal(persistedCalls,2);
+ const savedStatus=await api.document('system','guidance-ai:status');
+ const savedFetch=globalThis.fetch,savedKey=process.env.GEMINI_API_KEY,savedModel=process.env.GEMINI_MODEL;
+ try{
+  process.env.GEMINI_API_KEY=env.GEMINI_API_KEY;process.env.GEMINI_MODEL=env.GEMINI_MODEL;
+  let diagnosticCalls=0;
+  globalThis.fetch=async(_url,request)=>{
+   diagnosticCalls++;
+   const input=JSON.parse(JSON.parse(request.body).contents[0].parts[0].text);
+   assert(!JSON.stringify(input).includes('private-id'));
+   const candidate=input.candidates[0];
+   return response({summary:'Tus intereses invitan a explorar estas opciones y contrastarlas con actividades concretas.',modality:input.modality||'no-aplica',reasons:[{candidateId:candidate.id,reason:'Tus intereses se relacionan con las actividades de esta opción de estudio.',evidence:candidate.evidence}],nextSteps:['Compara las asignaturas de esta opción de estudio.','Conversa con tu orientador sobre tus intereses.']});
+  };
+  for(const level of ['bachillerato','universidad']){
+   const check=await api.checkStudentAI(level);assert.equal(check.ok,true);assert.equal(check.educationLevel,level);
+   assert((await api.checkStudentAI(level)).reused);
+  }
+  assert.equal(diagnosticCalls,2);
+  assert.deepEqual(await api.document('system','guidance-ai:status'),savedStatus,'Synthetic checks never replace actual student health status');
+ }finally{
+  globalThis.fetch=savedFetch;
+  for(const [key,value] of [['GEMINI_API_KEY',savedKey],['GEMINI_MODEL',savedModel]])if(value===undefined)delete process.env[key];else process.env[key]=value;
+ }
  console.log('PASS student AI: route isolation, aggregate privacy, candidate/evidence validation, current configuration, truthful errors, timeout, bounded retries, concurrency dedupe, private persistence and daily budget.');
 } finally {await api.db.close();}

@@ -1,3 +1,4 @@
+import {reportLimitations} from '@/components/kit/lib/report-limitations';
 import { ensureGuidance } from './guidance';
 import { studentEducationLevel,submissionRoutes } from './assessment-route';
 import { requireCompletedAssessments } from './assessment-readiness';
@@ -198,8 +199,7 @@ export async function createIntegralReport(
   }
   sections.push({title:school?'Orientación de Bachillerato':'Orientación de Universidad',lines:[
     guidance.analysis.summary,
-    guidance.ai?.status==='available'?'Análisis de resultados asistido por IA. Modelo: '+guidance.model:'Orientación calculada a partir de los resultados guardados.',
-    ...(guidance.ai?.error?.message?[guidance.ai.error.message]:[]),
+    'Orientación elaborada a partir de tus respuestas guardadas.',
   ]});
   if(school){
     const pathway=guidance.analysis.pathway;
@@ -299,7 +299,7 @@ export async function createIntegralReport(
     lines: [
       "Copia fechada de las entregas seleccionadas y del contexto personal disponible al generarla. Las ediciones posteriores no cambian esta copia.",
       "Intereses y preferencias orientan la exploración. Laboratorio, autoconocimiento, curso y reflexiones aportan contexto; no se mezclan en una puntuación de aptitud.",
-      ...guidance.analysis.limitations,
+      ...reportLimitations(guidance.analysis.limitations),
     ],
   });
   const payload = {

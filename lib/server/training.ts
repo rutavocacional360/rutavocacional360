@@ -140,6 +140,10 @@ async function validate(u: User, kind: string, e: any) {
     fail("Estado inválido.");
   if (e.careerIds !== undefined && !Array.isArray(e.careerIds)) fail('Revisa las opciones de estudio.');
   if (e.educationLevel !== undefined && !['bachillerato','universidad'].includes(e.educationLevel)) fail('Revisa el nivel de preparación.');
+  if (e.careerIds?.some(schoolTarget) && e.careerIds.some((id: string) => !schoolTarget(id)))
+    fail('Separa las opciones de Bachillerato y Universidad.');
+  if (e.educationLevel && e.careerIds?.some((id: string) => schoolTarget(id) !== (e.educationLevel === 'bachillerato')))
+    fail('El nivel debe coincidir con las opciones de estudio asignadas.');
   if (
     kind === "simulator" &&
     (!Array.isArray(e.questions) ||
@@ -782,7 +786,7 @@ export async function attemptView(u: User, a: any) {
     expires_at: a.expires_at,
     closed_at: a.closed_at,
     finished_at: a.closed_at,
-    simulator: { id: s.id, version: s.version, title: s.title },
+    simulator: { id: s.id, version: s.version, title: s.title, educationLevel:preparationLevel(s.careerIds,s.educationLevel) },
     serverTime: now(),
     revision: a.revision,
     instrument: safe,

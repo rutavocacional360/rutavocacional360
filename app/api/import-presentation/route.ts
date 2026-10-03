@@ -3,7 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser, fail, rateLimit } from "@/lib/server/store";
 import { trustedMutationOrigin } from "@/lib/server/request-origin";
 import { summarizeInstrument } from "@/lib/server/import-presentation";
-import { suggestSimulatorFields } from "@/lib/server/simulator-autofill";
+import { suggestSimulatorFields, suggestStudyOptions } from "@/lib/server/simulator-autofill";
+import { assessmentImportLevel } from '@/lib/server/assessment-import';
+import { schoolTrainingTargets, schoolTarget } from '@/components/kit/data/school-training';
+import { ecuadorCareers } from '@/lib/server/ecuador-catalog';
 export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
@@ -11,6 +14,17 @@ export async function POST(req: NextRequest) {
     if (!trustedMutationOrigin(req)) fail("Origen no permitido.", 403);
     await rateLimit("ai-editor:" + user.id);
     const body = await readJsonObject(req, 300000);
+    if (body.operation !== undefined && !['study-options', 'simulator'].includes(body.operation))
+      fail('Operación de IA no válida. Actualiza la aplicación y vuelve a intentar.');
+    if(body.operation === 'study-options') {
+      const educationLevel = assessmentImportLevel(body.educationLevel);
+      if(typeof body.title !== 'string' || body.title.length > 500 || typeof body.description !== 'string' || body.description.length > 40000)
+        fail('Contenido del documento no válido.');
+      const catalog = educationLevel === 'bachillerato' ? schoolTrainingTargets : ecuadorCareers;
+      const careers = catalog.map(({id,name})=>({id,name}));
+      const careerIds = await suggestStudyOptions({title:body.title,description:body.description,educationLevel,careers});
+      return NextResponse.json({careerIds},{headers:{'Cache-Control':'no-store'}});
+    }
     if (body?.operation === "simulator") {
       if (
         !Array.isArray(body.questions) ||
@@ -22,8 +36,15 @@ export async function POST(req: NextRequest) {
         body.title.length > 500
       )
         fail("Contenido del simulador no válido.");
+      const educationLevel = assessmentImportLevel(body.educationLevel);
+      const catalog = educationLevel === 'bachillerato' ? schoolTrainingTargets : ecuadorCareers;
+      const allowed = new Set(body.careers.map((c: any) => c?.id));
+      const careers = catalog.filter(c => allowed.has(c.id)).map(({id,name}) => ({id,name}));
+      const suggestions = await suggestSimulatorFields({...body, educationLevel, careers});
+      suggestions.careerIds = (Array.isArray(suggestions.careerIds) ? suggestions.careerIds : [])
+        .filter((id: unknown) => careers.some(c => c.id === id) && schoolTarget(id) === (educationLevel === 'bachillerato'));
       return NextResponse.json(
-        { suggestions: await suggestSimulatorFields(body) },
+        { suggestions },
         { headers: { "Cache-Control": "no-store" } },
       );
     }
@@ -50,6 +71,7 @@ export async function POST(req: NextRequest) {
         error: e.status
           ? e.message
           : "No se pudo generar la sugerencia. Vuelve a intentar.",
+        ...(e.code === 'AI_CONFIG' ? {code: e.code} : {}),
       },
       { status: e.status || 503, headers: { "Cache-Control": "no-store" } },
     );

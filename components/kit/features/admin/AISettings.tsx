@@ -4,10 +4,21 @@ import {Button,Card,Notice} from '../../components/ui/primitives';
 
 export function AISettings(){
  const [status,setStatus]=useState<any>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const [checks,setChecks]=useState<any[]>([]),[checking,setChecking]=useState(false);
  const load=async()=>{setError('');try{setStatus(await previewAction('admin/orientation-content'));}catch(e){setError((e as Error).message);}};
  useEffect(()=>{void load();},[]);
  const update=async()=>{if(busy)return;setBusy(true);setError('');setMessage('');try{const result:any=await previewAction('admin/orientation-content',{method:'POST',body:'{}'});setMessage(result.reused?'Las explicaciones académicas de IA están actualizadas.':'Explicaciones académicas generadas y disponibles. El análisis personal se realiza cuando el estudiante completa los tests de su ruta.');await load();}catch(e){setError((e as Error).message);}finally{setBusy(false);}};
  const analysis=status?.studentAnalysis;
+ const check=async()=>{
+  if(checking||busy)return;
+  setChecking(true);setError('');setChecks([]);
+  try{
+   for(const educationLevel of ['bachillerato','universidad']){
+    const result=await previewAction('admin/ai-check',{method:'POST',body:JSON.stringify({educationLevel})});
+    setChecks(previous=>[...previous,result]);
+   }
+  }catch(e){setError((e as Error).message);}finally{setChecking(false);}
+ };
  return <Card className="stack" style={{marginTop:24}}>
   <h2>Inteligencia artificial</h2>
   <p>La IA analiza los resultados agregados de los tests de cada ruta para explicar la afinidad con opciones de Bachillerato o carreras de Universidad. El análisis conserva la evidencia de los tests y las opciones del catálogo.</p>
@@ -20,7 +31,12 @@ export function AISettings(){
    </>}
   </>:<p role="status">Comprobando el servicio…</p>}
   {error&&<Notice tone="danger">{error}</Notice>}{message&&<p role="status">{message}</p>}
-  <div className="row"><Button disabled={!status?.configured} loading={busy} onClick={()=>void update()}>Actualizar explicaciones con IA</Button><Button variant="secondary" disabled={busy} onClick={()=>void load()}>Comprobar estado</Button></div>
+  <div className="row"><Button disabled={!status?.configured||checking} loading={busy} onClick={()=>void update()}>Actualizar explicaciones con IA</Button><Button variant="secondary" disabled={busy||checking} onClick={()=>void load()}>Comprobar estado</Button><Button variant="secondary" disabled={!status?.configured||busy} loading={checking} onClick={()=>void check()}>Probar orientación de estudiantes</Button></div>
+  <p className="small muted">La prueba utiliza ejemplos ficticios de Bachillerato y Universidad; no modifica cuentas, tests ni informes. Las comprobaciones se reutilizan durante cinco minutos.</p>
+  <div aria-live="polite">
+   {checking&&<p role="status">Probando las dos rutas de orientación…</p>}
+   {checks.map(result=><Notice key={result.educationLevel} tone={result.ok?'success':'warning'}>{result.educationLevel==='bachillerato'?'Bachillerato':'Universidad'}: {result.ok?'respuesta de orientación validada.':result.error?.message||'No se pudo completar la prueba.'}</Notice>)}
+  </div>
   <p className="small muted">El análisis personal envía códigos y puntuaciones agregadas, etapa y candidatos de la ruta. Los nombres, correos y respuestas personales permanecen en el servidor. Los cursos se habilitan al completar los tests y publicar sus resultados.</p>
  </Card>;
 }

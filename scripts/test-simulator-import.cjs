@@ -11,3 +11,37 @@ assert.deepEqual(school.simulator.careerIds,['bachillerato:ciencias']);
 assert(school.message.includes('opciones de bachillerato preseleccionadas'));
 assert.equal(school.simulator.questions[0].reviewed,false,'Imported keys require administrative review');
 console.log('PASS school document import: scoped target selection, explicit keys retained and review required.');
+const late=simulatorFromDocument({tests:[{...document.tests[0],title:'Documento',careerLinks:[]}],text:'Contenido general '.repeat(200)+' Bachillerato en Ciencias'},'general.html',{...base,educationLevel:'bachillerato'},[...schoolTrainingTargets,{id:'software',name:'Software'}]);
+assert.deepEqual(late.simulator.careerIds,['bachillerato:ciencias'],'Detect careers beyond the document introduction without crossing levels');
+(async()=>{
+ const original=global.fetch;
+ try{
+  for(const educationLevel of ['bachillerato','universidad']){
+   const target=educationLevel==='bachillerato'?'bachillerato:ciencias':'software';let posts=0,polls=0;
+   global.fetch=async(url,options)=>{
+    if(options?.method==='POST'&&url==='/api/admin/import'){
+     posts++;assert.equal(options.body.get('educationLevel'),educationLevel);assert.equal(options.body.get('reuse'),'1');assert.equal(options.body.get('file').name,'fixture.html');
+     return Response.json({id:'job-'+educationLevel});
+    }
+    if(url.startsWith('/api/admin/import?id=')){
+     polls++;return Response.json({status:'Completado',tests:[{...document.tests[0],careerLinks:[{careerId:target}],questions:document.tests[0].questions.map(q=>({...q,explanation:'Clave documentada.'}))}]});
+    }
+    throw Error('Unexpected request: '+url);
+   };
+   const result=await require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['<h1>Fixture</h1>'],'fixture.html',{type:'text/html'}),{...base,educationLevel},[{id:target,name:'Opción QA'}]);
+   assert.equal(posts,1);assert.equal(polls,1);assert.equal(result.simulator.educationLevel,educationLevel);assert.deepEqual(result.simulator.careerIds,[target]);
+  }
+  let cancelledPolls=0;
+  global.fetch=async(url,options)=>options?.method==='POST'?Response.json({id:'cancelled'}):(cancelledPolls++,Response.json({status:'Cancelado',error:'Cancelado por administración.'}));
+  await assert.rejects(require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['<h1>Fixture</h1>'],'fixture.html'),{...base,educationLevel:'universidad'},[]),/Cancelado por administración/);
+  assert.equal(cancelledPolls,1,'Cancelled jobs must fail immediately, without waiting for the extraction deadline');
+  const timer=global.setTimeout;let slowPolls=0;
+  try{
+   global.setTimeout=(callback)=>timer(callback,0);
+   global.fetch=async(url,options)=>options?.method==='POST'?Response.json({id:'slow'}):Response.json(++slowPolls<=185?{status:'Procesando'}:{status:'Completado',tests:[{...document.tests[0],questions:document.tests[0].questions.map(q=>({...q,explanation:'Clave documentada.'}))}]});
+   const slow=await require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['<h1>Fixture</h1>'],'fixture.html'),{...base,educationLevel:'universidad'},[{id:'software',name:'Software'}]);
+   assert.equal(slowPolls,186);assert.equal(slow.simulator.questions.length,1,'Long extractions must remain recoverable past the former 180-poll deadline');
+  }finally{global.setTimeout=timer;}
+  console.log('PASS simulator upload and polling for both routes: multipart category, retained keys, scoped careers.');
+ }finally{global.fetch=original;}
+})().catch(e=>{console.error(e);process.exitCode=1});

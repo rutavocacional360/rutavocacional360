@@ -9,6 +9,7 @@ import { calculateTest } from '@/components/kit/lib/test-engine';
 import { assessmentReadiness } from './assessment-readiness';
 import { schoolGuidance } from '@/components/kit/lib/school-guidance';
 import {analyzeStudentGuidance,studentAIConfigSignature} from './student-guidance-ai';
+import {reportLimitations} from '@/components/kit/lib/report-limitations';
 
 export const PROMPT_VERSION = ACADEMIC_VERSION;
 export const configured = () => true;
@@ -19,9 +20,17 @@ function scope(user:any) {
   };
 }
 const asReport=(row:any)=>({...JSON.parse(row.content),status:row.status,attempts:row.attempts});
+// Keep operational diagnostics in storage and administrator responses only.
+const studentReport=(report:any)=>{
+  const {ai,provider,model,contentSource,promptVersion,...result}=report;
+  return {...result,analysis:{...result.analysis,limitations:reportLimitations(result.analysis?.limitations)}};
+};
 export async function listGuidance(user:any) {
   const s=scope(user);
-  return (await db.prepare('SELECT r.* FROM guidance_reports r JOIN users u ON u.id=r.user_id WHERE '+s.sql+' ORDER BY r.created_at DESC, r.version DESC').all(...s.args)).map(asReport);
+  return (await db.prepare('SELECT r.* FROM guidance_reports r JOIN users u ON u.id=r.user_id WHERE '+s.sql+' ORDER BY r.created_at DESC, r.version DESC').all(...s.args)).map(row=>{
+    const report=asReport(row);
+    return user.role==='student'?studentReport(report):report;
+  });
 }
 export async function readGuidance(user:any,id:string) {
   const r=(await listGuidance(user)).find((r:any)=>r.id===id);
@@ -110,7 +119,7 @@ export async function ensureGuidance(user:any,_regenerate=false) {
       report.analysis.pathway.nextSteps=ai.nextSteps!;
       for(const option of [...report.analysis.pathway.science,...report.analysis.pathway.technical])option.reason=ai.reasons?.find(r=>r.candidateId===option.id)?.reason||option.reason;
     }else for(const option of report.analysis.recommendations)option.reason=ai.reasons?.find(r=>r.candidateId===option.careerId)?.reason||option.reason;
-    report.analysis.limitations.push('La IA interpreta puntuaciones agregadas y opciones verificadas de esta ruta. La recomendación requiere contrastarse con asignaturas, experiencias y orientación docente.');
+    report.analysis.limitations.push('La orientación interpreta tus resultados y opciones verificadas de esta ruta. La recomendación requiere contrastarse con asignaturas, experiencias y orientación docente.');
   }
   const version=Number(((await db.prepare('SELECT MAX(version) AS v FROM guidance_reports WHERE user_id=?').get(user.id)) as any)?.v||0)+1;
   // Concurrent dashboard/course/result requests must reuse the same snapshot.
@@ -120,7 +129,7 @@ export async function ensureGuidance(user:any,_regenerate=false) {
   return asReport(await db.prepare('SELECT * FROM guidance_reports WHERE id=? AND user_id=?').get(id,user.id));
 }
 export async function analyzeGuidance(user:any,body:any) {
-  if(user.role==='student')return ensureGuidance(user,true);
+  if(user.role==='student')return studentReport(await ensureGuidance(user,true));
   if(!['admin','orientador'].includes(user.role)||typeof body.studentId!=='string')fail('Selecciona un estudiante de tu alcance.',403);
   const student:any=await db.prepare("SELECT * FROM users WHERE id=? AND role='student' AND institutionId IS ?").get(body.studentId,user.institutionId);
   if(!student||(user.role==='orientador'&&student.groupName!==user.group))fail('Estudiante no disponible para esta cuenta.',403);

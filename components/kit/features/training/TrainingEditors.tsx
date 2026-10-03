@@ -5,7 +5,7 @@ import {importSimulatorDocument} from '../../lib/import-simulator';
 import {PresentationEditor} from '../../components/domain/PresentationEditor';
 import {suggestSimulatorCareers} from "../../lib/simulator-careers";
 import { AcademicQuestionSettings } from "./AcademicQuestionSettings";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Button,
   Field,
@@ -535,9 +535,9 @@ export function SimulatorEditor({
   value: s,
   onChange: change,
   data: d,
-  onSave,onPublish,saving=false,
+  onSave,onPublish,saving=false,onBusyChange,
 }: {
-  onSave?:()=>void;onPublish?:()=>void;saving?:boolean;
+  onSave?:()=>void;onPublish?:()=>void;saving?:boolean;onBusyChange?:(busy:boolean)=>void;
   value: Simulator;
   onChange: (v: Simulator) => void;
   data: any;
@@ -551,6 +551,9 @@ export function SimulatorEditor({
     [result, setResult] = useState<any>(null),
     [preview, setPreview] = useState<Simulator | null>(null),
     [answers, setAnswers] = useState<any>({});
+  const mounted=useRef(true);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  useEffect(()=>{onBusyChange?.(busy);return()=>onBusyChange?.(false);},[busy,onBusyChange]);
   const patch = (v: Partial<Simulator>) => change({ ...s, ...v }),
     q = s.questions[qi],
     t = academicInstrument(s);
@@ -572,20 +575,21 @@ export function SimulatorEditor({
   const pendingQuestions=s.questions.map((question,index)=>({question,index,messages:[...questionIssues.filter(p=>p.questionId===question.id).map(p=>p.message),...(!question.explanation?.trim()?['Falta explicación.']:[]),...(!question.source?.trim()?['Falta procedencia.']:[])]})).filter(item=>item.messages.length);
   async function completeWithAI(){
    setBusy(true);setError('');setAiProgress('Preparando el simulador…');
-   try{const result=await autofillSimulator(s,d.careers,false,setAiProgress);change(result.simulator);setError(result.message);setStep(4);}finally{setBusy(false);setAiProgress('');}
+   try{const result=await autofillSimulator(s,d.careers,false,message=>{if(mounted.current)setAiProgress(message);});if(!mounted.current)return;change(result.simulator);setError(result.message);setStep(4);}finally{if(mounted.current){setBusy(false);setAiProgress('');}}
   }
   async function upload(file: File) {
     setBusy(true);
     setError("");
     try {
       const result=await importSimulatorDocument(file,s,d.careers);
+      if(!mounted.current)return;
       change(result.simulator);
       setError(result.message);
       setStep(0);
     } catch (e) {
-      setError((e as Error).message);
+      if(mounted.current)setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if(mounted.current)setBusy(false);
     }
   }
   return (
@@ -596,6 +600,7 @@ export function SimulatorEditor({
        {aiProgress&&<p role="status">{aiProgress}</p>}
        {error&&<Notice>{error}</Notice>}
       </div>
+      <fieldset disabled={busy||saving} style={{border:0,padding:0,margin:0,minWidth:0}}>
       <nav className="te-steps" aria-label="Editor de simulador">
         {["Información", "Preguntas", "Puntuación", "Aplicación", "Revisar y publicar"].map(
           (label, i) => (
@@ -620,8 +625,9 @@ export function SimulatorEditor({
           />
           <ChoiceList label={d.educationLevel==='bachillerato'?'Áreas y figuras de bachillerato':'Carreras del simulador'} items={d.careers} value={s.careerIds||[]} onChange={careerIds=>patch({careerIds})}/>
 
+          {d.educationLevel==='universidad'&&!!s.careerIds?.length&&<details><summary>Universidades que ofrecen las carreras seleccionadas</summary>{d.careers.filter((c:any)=>s.careerIds?.includes(c.id)).map((c:any)=><div key={c.id}><strong>{c.name}</strong><ul>{[...new Set<string>((c.offers||[]).map((o:any)=>o.institution))].map(name=><li key={name}>{name}</li>)}</ul>{!c.offers?.length&&<p>Sin oferta registrada en el catálogo.</p>}</div>)}</details>}
           <p className="small muted">Asigna el simulador a las opciones de esta ruta. La nota mide esta práctica de contenidos; no decide qué bachillerato o carrera debe elegir el estudiante.</p>
-          <PresentationEditor instrument={{...s.instrument,title:s.title}} onChange={presentation=>patch({instrument:{...s.instrument,presentation}})}/>
+          <PresentationEditor instrument={{...s.instrument,title:s.title}} onChange={presentation=>patch({instrument:{...s.instrument,presentation}})} onBusyChange={setBusy}/>
           <TextareaField
             label="Instrucciones"
             value={s.instrument.description}
@@ -1165,6 +1171,7 @@ export function SimulatorEditor({
       )}
       </section>
       <div className="row te-footer"><Button variant="secondary" disabled={step===0||busy||saving} onClick={()=>setStep(step-1)}>Anterior</Button>{step<4&&<Button disabled={busy||saving} onClick={()=>setStep(step+1)}>Continuar</Button>}{onSave&&<Button variant="secondary" disabled={busy||saving} onClick={onSave}>Guardar borrador</Button>}<span className="small muted">Paso {step+1} de 5 · {s.questions.length} preguntas</span></div>
+      </fieldset>
     </div>
   );
 }

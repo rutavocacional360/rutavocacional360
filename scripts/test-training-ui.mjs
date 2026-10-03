@@ -7,15 +7,15 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','training-ui-')),outfile=resolve(folder,'ui.cjs'),primitives=resolve('components/kit/components/ui/primitives.tsx').replaceAll('\\','/');
-await build({stdin:{contents:`export {StudentCourses} from './components/kit/features/training/StudentCourses';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile,loader:{'.css':'empty'},plugins:[{name:'fixtures',setup(b){
+await build({stdin:{contents:`export {StudentCourses} from './components/kit/features/training/StudentCourses';export {AdminCourses} from './components/kit/features/training/AdminCourses';export {StudyOptionSuggestions} from './components/kit/features/admin/StudyOptionSuggestions';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile,loader:{'.css':'empty'},plugins:[{name:'fixtures',setup(b){
  b.onResolve({filter:/\/lib\/session$/},()=>({path:'session',namespace:'fixture'}));
  b.onResolve({filter:/\/components\/ui\/primitives$/},()=>({path:'primitives',namespace:'fixture'}));
  b.onResolve({filter:/^next\/navigation$/},()=>({path:'navigation',namespace:'fixture'}));
  b.onResolve({filter:/^\.\/shared$/},()=>({path:'training',namespace:'fixture'}));
  b.onResolve({filter:/^\.\/SimulatorRun$/},()=>({path:'simulator',namespace:'fixture'}));
- b.onLoad({filter:/.*/,namespace:'fixture'},args=>({resolveDir:process.cwd(),contents:args.path==='primitives'?`import React from 'react';import {Button as ActualButton} from '${primitives}';export * from '${primitives}';export function Button(props){(globalThis.__trainingButtons||=[]).push(props);return React.createElement(ActualButton,props)}`:args.path==='navigation'?`export const useSearchParams=()=>new URLSearchParams(globalThis.__trainingQuery||'');export const useRouter=()=>({push(url){globalThis.__trainingNavigations.push(url)}});`:args.path==='session'?`export const useSession=()=>({values:{'rv360:profile':globalThis.__trainingProfile}});`:args.path==='training'?`export const useTraining=()=>({data:globalThis.__trainingFixture,error:'',busy:false,refresh(){},run(){}});export function TrainingError(){return null;}export async function trainingApi(){};export const decimal=String;`:`export function SimulatorRun(){return null;}export function TrainingResult(){return null;}`}));
+ b.onLoad({filter:/.*/,namespace:'fixture'},args=>({resolveDir:process.cwd(),contents:args.path==='primitives'?`import React from 'react';import {Button as ActualButton} from '${primitives}';export * from '${primitives}';export function Button(props){(globalThis.__trainingButtons||=[]).push(props);return React.createElement(ActualButton,props)}`:args.path==='navigation'?`export const useSearchParams=()=>new URLSearchParams(globalThis.__trainingQuery||'');export const useRouter=()=>({push(url){globalThis.__trainingNavigations.push(url)}});`:args.path==='session'?`export const previewAction=async()=>({careers:[]});export const useSession=()=>({values:{'rv360:profile':globalThis.__trainingProfile}});`:args.path==='training'?`export const useTraining=()=>({data:globalThis.__trainingFixture,error:'',busy:false,refresh(){},run(){}});export function TrainingError(){return null;}export async function trainingApi(){};export const decimal=String;export function ChoiceList(){return null;}`:`export function SimulatorRun(){return null;}export function TrainingResult(){return null;}`}));
 }}]});
-const {StudentCourses}=createRequire(import.meta.url)(outfile);
+const {StudentCourses,AdminCourses,StudyOptionSuggestions}=createRequire(import.meta.url)(outfile);
 const readiness=ready=>({ready,total:3,completed:ready?3:1,pending:ready?[]:[{id:'pending',title:'Test pendiente QA',state:'awaiting_results'}]});
 try{
  for(const level of ['bachillerato','universidad']){
@@ -60,3 +60,15 @@ try{
  console.log('PASS specialization links: encoded route query, general preparation plus exact simulators, unrelated specialties hidden, foreign routes rejected, and honest unavailable content.');
  console.log('PASS rendered courses UI: both routes show pending tests, hide stale recommendations, and unlock relevant preparation only after completion.');
 }finally{delete globalThis.__trainingProfile;delete globalThis.__trainingFixture;delete globalThis.__trainingQuery;delete globalThis.__trainingNavigations;delete globalThis.__trainingButtons;}
+
+for(const level of ['bachillerato','universidad']){
+ globalThis.__trainingQuery='nivel='+level;globalThis.__trainingNavigations=[];globalThis.__trainingButtons=[];
+ globalThis.__trainingFixture={careers:[],simulators:['bachillerato','universidad'].map(educationLevel=>({instrument:{description:'Preparación QA'},id:educationLevel,title:'Simulador '+educationLevel,educationLevel,status:'draft',version:1,durationMinutes:30,careerIds:[],questions:[]})),attempts:[]};
+ const markup=renderToStaticMarkup(React.createElement(AdminCourses));
+ assert(markup.includes('Simulador '+level));assert(!markup.includes('Simulador '+(level==='bachillerato'?'universidad':'bachillerato')));
+ const other=level==='bachillerato'?'Universidad':'Bachillerato';globalThis.__trainingButtons.find(b=>b.children===other).onClick();assert.equal(globalThis.__trainingNavigations.at(-1),'/admin/cursos?nivel='+other.toLowerCase());
+}
+const optionMarkup=renderToStaticMarkup(React.createElement(StudyOptionSuggestions,{test:{id:'qa',educationLevel:'bachillerato',title:'Bachillerato en Ciencias',description:'Documento de ciencias',options:[],questions:[]},careers:[{id:'bachillerato:ciencias',name:'Bachillerato en Ciencias'}],onSelect(){}}));
+assert(optionMarkup.includes('Opciones detectadas en el contenido'));assert(optionMarkup.includes('Detectar opciones con IA'));
+console.log('PASS admin category routes, scoped simulator lists and automatic document option suggestions.');
+for(const key of ['__trainingFixture','__trainingQuery','__trainingNavigations','__trainingButtons'])delete globalThis[key];

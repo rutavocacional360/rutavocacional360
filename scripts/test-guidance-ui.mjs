@@ -28,6 +28,11 @@ try{
  for(const label of ['Modalidad recomendada: Bachillerato Técnico','Bachillerato en Ciencias','Informática','Recomendaciones para avanzar','/mi-ruta/perfil'])assert(html.includes(label),label);
  assert(!/universidad|universitari/i.test(html),'School guidance must not render university bridges, programs or careers');
  assert(!html.includes('NaN'));
+ assert(html.includes('OPCIÓN 01 PARA EXPLORAR')&&html.includes('Por qué aparece en tus resultados'),'School cards follow the university exploration flow');
+ for(const option of [...pathway.science,...pathway.technical]){
+  const technical=pathway.technical.some(item=>item.id===option.id);
+  assert(html.includes('aria-label="'+(technical?'Conocer la figura: ':'Conocer el área: ')+option.name+'"'),'Each school option has a named detail action');
+ }
  assert(html.includes('Modalidad recomendada: Bachillerato Técnico'));
  const renderPath=(p,readiness=ready)=>render(BaccalaureateResult,{pathway:p,readiness});
  assert(renderPath({...pathway,suggested:'ciencias'}).includes('Modalidad recomendada: Bachillerato en Ciencias'));
@@ -80,13 +85,17 @@ try{
  assert(!render(GuidanceDocument,{report:{...report,historical:true}}).includes('/mi-ruta/cursos?carrera='),'Historical guidance never opens current personalized preparation');
  const incompleteDocument=render(GuidanceDocument,{report:{...report,partial:true,progress:{submitted:1,total:3},readiness:{bachillerato:{ready:false,total:3,completed:1,pending:[]}}}});
  assert(!incompleteDocument.includes('bp-option-title')&&!incompleteDocument.includes('/mi-ruta/cursos?carrera='),'The partial document does not recommend or link areas');
- assert(schoolDocument.includes('Análisis de tus resultados asistido por IA'));
  assert(!/universidad|universitari/i.test(schoolDocument),'School document must hide university tabs, sources, recommendations, dialogs and bridges even with legacy mixed data');
  assert(schoolDocument.includes('Informe PDF'),'Keep PDF access for the school route');
  assert.deepEqual(reportNextSteps(report),pathway.nextSteps.filter(s=>!/universidad|universitari|educación superior/i.test(s)));
  const failed=render(GuidanceDocument,{report:{...report,ai:{status:'error',error:{message:'Servicio de IA no disponible QA'}}}});
- assert(failed.includes('Análisis con IA pendiente'));assert(failed.includes('Servicio de IA no disponible QA'));
- assert(!failed.includes('Análisis de tus resultados asistido por IA'));
+ for(const status of ['available','error','pending','not_configured']){
+  const rendered=render(GuidanceDocument,{report:{...report,ai:{status,error:{message:'INTERNAL_PROVIDER_ERROR_QA'}},analysis:{...report.analysis,limitations:['La IA interpreta puntuaciones agregadas.']}}});
+  assert(!/\bIA\b|INTERNAL_PROVIDER_ERROR_QA|gemini/i.test(rendered),'Provider details stay out of student reports: '+status);
+  assert(rendered.includes('Modalidad recomendada:'));
+  assert(/<details[^>]*open[^>]*class="rd-disclosure rd-next"/.test(rendered),'Next steps are expanded');
+  for(const step of reportNextSteps(report))assert(rendered.includes(step));
+ }
  const university={...report,educationLevel:'universidad',profile:{stage:'Me gradué del colegio'},readiness:{universidad:{ready:true}},analysis:{...report.analysis,pathway:null,summary:'Análisis universitario QA'}};
  globalThis.__guidanceTestValues={'rv360:profile':university.profile};
  const universityDocument=render(GuidanceDocument,{report:university});
@@ -142,5 +151,5 @@ try{
  assert(styles.includes('min-height:44px'),'Preparation, tabs and disclosures meet touch target minimum');
  assert(styles.includes('@media(max-width:640px)')&&styles.includes('.bp-option-grid{grid-template-columns:1fr}')&&styles.includes('.rd-career-grid{grid-template-columns:1fr}'),'School options and university careers become one column on mobile');
  assert(!styles.includes('.rd-career button{'),'Career buttons preserve their visible button styling');
- console.log('PASS rendered guidance UI: each educational stage has only its own tests, results, recommendations and preparation; school histories remain scoped; AI errors are visible.');
+ console.log('PASS rendered guidance UI: each educational stage has only its own tests, results, recommendations and preparation; school histories remain scoped; provider failures preserve recommendations without technical messages.');
 }finally{delete globalThis.__guidanceTestRole;delete globalThis.__guidanceTestValues;}

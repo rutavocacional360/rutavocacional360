@@ -4,7 +4,7 @@ import {spawnSync} from 'node:child_process';
 const tests = [
   'test-admin-crud.mjs', 'test-assessment-admin-routes.mjs', 'test-admin-tests-ui.mjs',
   'test-training-readiness.mjs',
-  'test-training-ui.mjs',
+  'test-training-ui.mjs', 'test-admin-ai-ui.mjs',
   'test-ai-flows.mjs', 'test-student-guidance-ai.mjs',
   'test-validation.mjs',
   'test-name-input.mjs',

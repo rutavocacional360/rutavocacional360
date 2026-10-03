@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {mkdirSync,mkdtempSync,writeFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,writeFileSync,readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 
@@ -9,10 +9,12 @@ const folder=mkdtempSync(resolve('.qa-tools','assessment-import-'));
 process.env.DB_DRIVER='sqlite';process.env.DATABASE_PATH=resolve(folder,'imports.sqlite');
 process.env.IMPORT_PATH=resolve(folder,'files');mkdirSync(process.env.IMPORT_PATH);
 const outfile=resolve(folder,'server.cjs');
-await build({stdin:{contents:`export {db,put,document} from './lib/server/store';export {assignJob,startJob,cancelJob} from './lib/server/import-jobs';export * from './lib/server/assessment-import';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,plugins:[{name:'server-only',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
+await build({stdin:{contents:`export {db,put,document} from './lib/server/store';export {assignJob,startJob,cancelJob} from './lib/server/import-jobs';export * from './lib/server/assessment-import';export {POST as uploadDocument} from './app/api/admin/import/route';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,plugins:[{name:'server-only',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));b.onResolve({filter:/^@\/lib\/server\/store$/},()=>({path:'route-auth',namespace:'test-auth'}));b.onLoad({filter:/.*/,namespace:'test-auth'},()=>({contents:`export * from ${JSON.stringify(resolve('lib/server/store.ts').replaceAll('\\','/'))};export async function requireUser(){return globalThis.importTestAdmin;}`,resolveDir:process.cwd()}));}}]});
 await build({entryPoints:['scripts/import-worker.mjs'],outfile:'.runtime/import-worker.cjs',bundle:true,platform:'node',target:'node24',format:'cjs',packages:'external'});
-const {db,put,document,assignJob,startJob,cancelJob,assessmentImportLevel,scopeImportedTests}=createRequire(import.meta.url)(outfile);
+const {db,put,document,assignJob,startJob,cancelJob,assessmentImportLevel,scopeImportedTests,uploadDocument}=createRequire(import.meta.url)(outfile);
 const owner='institution:import-qa';
+globalThis.importTestAdmin={id:'import-admin',name:'Import QA',institutionId:'import-qa',role:'admin'};
+process.env.APP_URL='https://import.example.test';
 const metadata={title:'Documento con metadatos de otra ruta',educationLevel:'ambos',publishedAt:'2026-01-01',publishedBy:'old-admin',status:'Publicado',careerLinks:[{careerId:'bachillerato:ciencias'},{careerId:'university-fixture'}],questions:[{id:'q1',text:'Mi interés',type:'single',options:[{value:1,label:'Sí'},{value:2,label:'No'}]}]};
 const html='<script type="application/json">'+JSON.stringify(metadata)+'</script><h1>Test vocacional</h1>';
 async function completed(id){
@@ -62,5 +64,30 @@ try{
    else assert.equal((await completed(id)).educationLevel,'bachillerato');
   }finally{db.transaction=realTransaction;unblock();}
  }
+ // Exercise the real upload handler and storage with an isolated administrative identity.
+ const upload=async(source,reuse=false)=>{
+  const form=new FormData();form.set('file',new File([source],'simulator.html',{type:'text/html'}));form.set('educationLevel','universidad');if(reuse)form.set('reuse','1');
+  const response=await uploadDocument(new Request(process.env.APP_URL+'/api/admin/import',{method:'POST',headers:{Origin:process.env.APP_URL},body:form}));
+  return {httpStatus:response.status,...await response.json()};
+ };
+ const capacitySource=html+'<p>Capacity recovery fixture.</p>',beforeJobs=await document(owner,'rv360:imports',[]),beforeFiles=readdirSync(process.env.IMPORT_PATH).sort();
+ globalThis.rutaJobs.set('occupied-1',{});globalThis.rutaJobs.set('occupied-2',{});
+ try{
+  assert.equal((await upload(capacitySource,true)).httpStatus,429);
+  assert.deepEqual(await document(owner,'rv360:imports',[]),beforeJobs,'A rejected upload must not leave a duplicate-blocking import record');
+  assert.deepEqual(readdirSync(process.env.IMPORT_PATH).sort(),beforeFiles,'A rejected upload must not leave an orphaned source file');
+ }finally{globalThis.rutaJobs.delete('occupied-1');globalThis.rutaJobs.delete('occupied-2');}
+ const resumed=await upload(capacitySource,true);assert.equal(resumed.httpStatus,202);await completed(resumed.id);
+ const duplicate=await upload(capacitySource);assert.equal(duplicate.httpStatus,400,'Tests retain explicit duplicate rejection');
+ const reused=await upload(capacitySource,true);assert.equal(reused.id,resumed.id);assert.equal(reused.reused,true);
+ const count=(await document(owner,'rv360:imports',[])).length;
+ for(const status of ['Error','Cancelado']){
+  await put(owner,'rv360:imports',(await document(owner,'rv360:imports',[])).map(job=>job.id===resumed.id?{...job,status,error:'Interrupted fixture'}:job));
+  assert.equal((await upload(capacitySource,true)).id,resumed.id);await completed(resumed.id);
+  assert.equal((await document(owner,'rv360:imports',[])).length,count,'Retry recovers the same scoped import, without duplicating its history');
+ }
+ const concurrent=await Promise.all([upload(html+'<p>Concurrent reuse fixture.</p>',true),upload(html+'<p>Concurrent reuse fixture.</p>',true)]);
+ assert(concurrent.every(value=>value.httpStatus===202));assert.equal(concurrent[0].id,concurrent[1].id);await completed(concurrent[0].id);
  console.log('PASS imports: real isolated worker preserves selected route, ignores conflicting document metadata, filters linked careers, rejects reclassification and classifies legacy retries and serializes cancellation/retry races.');
-}finally{await db.close();}
+ console.log('PASS upload recovery: completed sources reused explicitly, failed/cancelled sources retried, concurrent uploads deduplicated and capacity failures leave no records or files.');
+}finally{delete globalThis.importTestAdmin;await db.close();}

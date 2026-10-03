@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     const form = await new Response(new Uint8Array(bytesBody), {headers:{"Content-Type": req.headers.get("content-type") || ""}}).formData(),
       file = form.get("file");
     const educationLevel = assessmentImportLevel(form.get("educationLevel"));
+    const reuse = form.get("reuse") === "1";
     if (!(file instanceof File) || file.size > 10000000 || file.size < 5)
       fail("Selecciona un archivo de hasta 10 MB.");
     if (!/\.(pdf|docx|html?|htm)$/i.test(file.name))
@@ -43,7 +44,13 @@ export async function POST(req: NextRequest) {
     const bytes = Buffer.from(await file.arrayBuffer()),
       digest = hash(bytes.toString("base64"));
     const previous = await document(owner, "rv360:imports", []);
-    if (previous.some((f: any) => f.hash === digest && f.educationLevel === educationLevel))
+    const existing = previous.find((f: any) => f.hash === digest && f.educationLevel === educationLevel);
+    const resume = async (record: any) => {
+      if (record.status !== "Completado") await startJob(owner, record.id, educationLevel);
+      return NextResponse.json({id:record.id, status:record.status === "Completado" ? "Completado" : "Procesando", educationLevel, reused:true}, {status:202});
+    };
+    if (existing && reuse) return await resume(existing);
+    if (existing)
       fail(
         "Este documento ya fue importado. Revisa su estado en el historial de importaciones.",
       );
@@ -51,10 +58,13 @@ export async function POST(req: NextRequest) {
       folder = importFolder();
     await mkdir(folder, { recursive: true });
     await writeFile(resolve(folder, id), bytes, { flag: "wx" });
+    let concurrent: any;
     try {
       await db.transaction(async () => {
         const current = await document(owner, "rv360:imports", []);
-        if (current.some((f: any) => f.hash === digest && f.educationLevel === educationLevel))
+        const duplicate = current.find((f: any) => f.hash === digest && f.educationLevel === educationLevel);
+        if (duplicate && reuse) { concurrent = duplicate; return; }
+        if (duplicate)
           fail("Este documento ya fue importado. Revisa su estado en el historial de importaciones.");
         await put(owner, "rv360:imports", [...current, {
           id, name:file.name.slice(0, 180), hash:digest, educationLevel,
@@ -65,7 +75,24 @@ export async function POST(req: NextRequest) {
       await unlink(resolve(folder, id)).catch(() => {});
       throw error;
     }
-    await startJob(owner, id);
+    if (concurrent) {
+      await unlink(resolve(folder, id)).catch(() => {});
+      return await resume(concurrent);
+    }
+    try {
+      await startJob(owner, id);
+    } catch (error: any) {
+      // Capacity rejection happens before a worker starts. Do not leave a duplicate
+      // record that blocks a later upload of this same source.
+      if (error.status === 429) {
+        await db.transaction(async () => {
+          const current = await document(owner, "rv360:imports", []);
+          await put(owner, "rv360:imports", current.filter((job: any) => job.id !== id));
+        });
+        await unlink(resolve(folder, id)).catch(() => {});
+      }
+      throw error;
+    }
     return NextResponse.json({ id, status: "Procesando", educationLevel }, { status: 202 });
   } catch (e: any) {
     return NextResponse.json(
