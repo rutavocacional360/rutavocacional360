@@ -5,7 +5,7 @@ const tests = [
   'test-admin-crud.mjs',
   'test-training-readiness.mjs',
   'test-training-ui.mjs',
-  'test-ai-flows.mjs',
+  'test-ai-flows.mjs', 'test-student-guidance-ai.mjs',
   'test-validation.mjs',
   'test-name-input.mjs',
   'test-security-boundaries.mjs', 'test-production-config.mjs', 'test-database-config.mjs',

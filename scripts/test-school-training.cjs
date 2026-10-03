@@ -1,12 +1,32 @@
 const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
-const {technicalOptions,educationStages}=require('../components/kit/data/baccalaureate.ts');
+const {technicalOptions,educationStages,schoolCatalogSource,baccalaureateModalities,complementaryArtsOffer}=require('../components/kit/data/baccalaureate.ts');
 const {schoolTrainingTargets,defaultPreparationLevel,preparationLevel,schoolTarget}=require('../components/kit/data/school-training.ts');
 const {schoolOrientationTemplate,schoolPracticeTemplate}=require('../components/kit/data/school-templates.ts');
 const {calculateTest,instrumentProblems}=require('../components/kit/lib/test-engine.ts');
 const {academicResult,simulatorProblems}=require('../components/kit/lib/training-engine.ts');
 const {localGuidance}=require('../components/kit/lib/local-guidance.ts');
 assert.equal(technicalOptions.length,34);assert.equal(new Set(technicalOptions.map(o=>o.id)).size,34);assert.equal(new Set(technicalOptions.map(o=>o.family)).size,11);
+// Official 2025 reform: stable persisted targets with corrected nomenclature and families.
+const byId=Object.fromEntries(technicalOptions.map(o=>[o.id,o]));
+for(const [id,name,family] of [
+ ['contabilidad','Gestión financiera y contable','Administrativa y financiera'],
+ ['datos','Ciencia de datos','Tecnologías'],
+ ['artes-plasticas','Artes plásticas y gestión cultural','Artes'],
+ ['artes-escenicas','Artes escénicas y gestión cultural','Artes'],
+ ['musica','Música y gestión cultural','Artes'],
+ ['mecanizado','Mecánica industrial','Industrial'],
+ ['electricidad','Instalaciones eléctricas y automatización','Industrial'],
+ ['climatizacion','Climatización','Industrial'],
+]){assert.equal(byId[id]?.name,name);assert.equal(byId[id]?.family,family);}
+assert.equal(technicalOptions.filter(o=>o.family==='Industrial').length,10);
+assert.deepEqual(technicalOptions.filter(o=>o.family==='Construcción sostenible').map(o=>o.id),['obra-civil']);
+assert.deepEqual(baccalaureateModalities.map(o=>o.id),['ciencias','tecnico']);
+assert.deepEqual(complementaryArtsOffer.specialties,['Música','Danza','Artes Plásticas']);
+assert.equal(schoolCatalogSource.educationLevel,'bachillerato');
+assert.equal(schoolCatalogSource.careerCount,34);assert.equal(schoolCatalogSource.offerCount,0);
+assert.match(schoolCatalogSource.sourceUrl,/educacion\.gob\.ec.+MINEDEC-MINEDEC-2025-00051-A/);
+assert.match(schoolCatalogSource.version,/2025-00051/);
 assert.equal(schoolTrainingTargets.length,40);assert(schoolTrainingTargets.every(t=>t.offers.length===0));
 for(const stage of educationStages.filter(s=>/EGB/.test(s)))assert.equal(defaultPreparationLevel({stage}),'bachillerato');
 assert.equal(defaultPreparationLevel({stage:'Me gradué del colegio'}),'universidad');assert.equal(schoolTarget(null),false);assert.equal(schoolTarget(1),false);

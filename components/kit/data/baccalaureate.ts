@@ -1,6 +1,6 @@
 import {currentTechnicalOptions,technicalCatalogSource} from './technical-figures';
 import {textProblem} from '../../../lib/validation';
-export const pathwayVersion = 'bachillerato-universidad-3';
+export const pathwayVersion = 'bachillerato-catalogo-2025-00051-v4';
 export const educationStages = ['Estoy en 10.º de EGB y pasaré a 1.º de BGU', 'Estudiante de EGB Superior (8.º o 9.º)', 'Estoy eligiendo mi bachillerato', 'Estudiante de bachillerato', 'Me gradué del colegio', 'Busco mi primera carrera universitaria'];
 export const isChoosingBaccalaureate=(stage='')=>/EGB|eligiendo mi bachillerato/i.test(stage);
 export const baccalaureateTypes = [
@@ -24,7 +24,7 @@ export const scienceOptions: SchoolOption[] = [
   { id: 'ciencias-sociales', name: 'Ciencias sociales y humanidades', dimensions: ['S','A'], areas: ['humanidades','educacion'], subjects: 'Historia, Lengua y Literatura, Filosofía', activity: 'Investiga un problema de tu comunidad y presenta dos perspectivas con argumentos.' },
   { id: 'ciencias-economia', name: 'Economía y organización', dimensions: ['E','C'], areas: ['negocios','servicios'], subjects: 'Matemática, Emprendimiento y Gestión, Lengua', activity: 'Compara dos propuestas de emprendimiento: propósito, presupuesto y necesidades de las personas.' },
 ];
-// Representative figures documented by MinEdec, not a complete list or school-level availability.
+// Historical names retained for reference; current recommendations use technicalOptions below.
 export const legacyTechnicalOptions: SchoolOption[] = [
   { id: 'diseno-multimedia', name: 'Diseño gráfico y multimedia', dimensions: ['A','I'], areas: ['arte','tecnologia'], subjects: 'Composición visual, ilustración y herramientas digitales', activity: 'Diseña una pieza visual para comunicar una idea y pide opiniones sobre su claridad.' },
   { id: 'informatica', name: 'Informática', dimensions: ['I','R'], areas: ['tecnologia','ingenieria'], subjects: 'Matemática, lógica y proyectos informáticos', activity: 'Crea una página sencilla o diagnostica un problema informático con supervisión.' },
@@ -39,11 +39,36 @@ export const legacyTechnicalOptions: SchoolOption[] = [
   { id: 'turismo', name: 'Ventas e información turística', dimensions: ['S','E','A'], areas: ['servicios','humanidades'], subjects: 'Idiomas, cultura y comunicación', activity: 'Prepara una ruta cultural local y presenta su historia a otra persona.' },
 ];
 export const technicalOptions = currentTechnicalOptions;
+export const baccalaureateModalities = [
+  {id:'ciencias',name:'Bachillerato en Ciencias',description:'Formación general e interdisciplinaria; profundiza áreas de conocimiento con asignaturas optativas.'},
+  {id:'tecnico',name:'Bachillerato Técnico',description:'Tronco común y formación técnica mediante familias y figuras profesionales.'},
+];
+export const baccalaureateModalitiesSource = {
+  title:'MinEduc · Orientaciones de Bachillerato en Ciencias, Técnico y Complementario en Artes, 2025–2026',
+  url:'https://educacion.gob.ec/wp-content/uploads/downloads/2025/04/Volvemos-al-aula.pdf',checkedAt:'2026-10-02',
+};
+// Complementary arts is parallel education with its own admission and progression.
+// It is distinct from the two Bachillerato General options and from technical Arts figures.
+export const complementaryArtsOffer = {
+  name:'Bachillerato Complementario en Artes',specialties:['Música','Danza','Artes Plásticas'],
+  description:'Formación artística paralela a EGB y Bachillerato General, con requisitos y estructura propios de cada especialidad. Consulta la disponibilidad en colegios de arte y conservatorios.',
+  source:baccalaureateModalitiesSource,
+};
+export const schoolCatalogSource = {
+  ...technicalCatalogSource,
+  title:'MinEdec · Modalidades y catálogo oficial de Bachillerato de Ecuador',
+  source:'Ministerio de Educación, Deporte y Cultura · Bachillerato General y catálogo de figuras profesionales',
+  sourceUrl:technicalCatalogSource.url,date:technicalCatalogSource.checkedAt,
+  educationLevel:'bachillerato',modalityCount:baccalaureateModalities.length,
+  careerCount:technicalOptions.length,offerCount:0,
+  scope:'Bachillerato en Ciencias y Bachillerato Técnico; 34 figuras técnicas en 11 familias y 3 áreas. Las áreas de exploración de Ciencias no son títulos ni especialidades oficiales. La disponibilidad de figuras y formación complementaria en Artes se confirma con cada institución.',
+};
 export const schoolSources = [
   technicalCatalogSource,
+  baccalaureateModalitiesSource,
   {title:'MinEduc · Orientación vocacional en 8.º, 9.º y 10.º de EGB',url:'https://recursos.educacion.gob.ec/red/lineamientos-para-el-periodo-pedagogico-de-orientacion-vocacional-y-profesional/'},
   { title: 'MinEdec · Currículo de Diseño gráfico y multimedia, 2025', url: 'https://educacion.gob.ec/wp-content/uploads/downloads/2025/10/curriculo-FIP-dmu.pdf' },
-  { title: 'MinEduc · Oferta formativa de Bachillerato', url: 'https://educacion.gob.ec/wp-content/uploads/downloads/2021/08/Oferta-Formativa-Bachillerato-2021.pdf' },
+  { title: 'MinEduc · Oferta formativa de Bachillerato y Complementario en Artes, referencia 2021', url: 'https://educacion.gob.ec/wp-content/uploads/downloads/2021/08/Oferta-Formativa-Bachillerato-2021.pdf' },
   { title: 'MinEdec · Figuras profesionales reportadas por el Distrito 13D03, 2025–2026', url: 'https://educacion.gob.ec/wp-content/uploads/downloads/2026/03/13D03.pdf' },
 ];
 export function schoolProfile(body: SchoolProfile): Required<SchoolProfile> {

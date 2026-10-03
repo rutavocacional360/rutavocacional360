@@ -1,3 +1,4 @@
+import {reportEducationLevel} from './report-route';
 import {defaultPreparationLevel} from '../../data/school-training';
 import {SchoolRouteStart} from './SchoolRouteStart';
 import { instrumentPresentation } from "../../lib/instrument-presentation";
@@ -87,8 +88,7 @@ function TestRows({
   rows: ReturnType<typeof useAssignedTests>["all"];
 }) {
   const profile=useSession().values["rv360:profile"];
-  const [level,setLevel]=useState<string>(defaultPreparationLevel(profile));
-  useEffect(()=>setLevel(defaultPreparationLevel(profile)),[profile?.stage]);
+  const level=defaultPreparationLevel(profile);
   const [query, setQuery] = useState(""),
     [status, setStatus] = useState("");
   const filtered = rows.filter(
@@ -111,7 +111,7 @@ function TestRows({
             : !r.submission && !r.count)),
   );
   return (
-    <div className="sw-library"><nav className="ar-tabs" aria-label="Ruta de los tests"><button className="button button--secondary" aria-pressed={level==='bachillerato'} onClick={()=>setLevel('bachillerato')}>Bachillerato</button><button className="button button--secondary" aria-pressed={level==='universidad'} onClick={()=>setLevel('universidad')}>Universidad</button></nav><p className="muted small">{level==='bachillerato'?'Para 8.º, 9.º y 10.º de EGB: conoce tus intereses y compara Ciencias y Técnico antes de entrar a BGU.':'Para tu paso de BGU a educación superior: intereses, carreras y opciones universitarias.'}</p>
+    <div className="sw-library"><p className="eyebrow">{level==='bachillerato'?'TUS TESTS DE BACHILLERATO':'TUS TESTS DE UNIVERSIDAD'}</p><p className="muted small">{level==='bachillerato'?'Para 8.º, 9.º y 10.º de EGB: conoce tus intereses y compara Ciencias y Técnico antes de entrar a BGU.':'Para tu paso de BGU a educación superior: intereses, carreras y opciones universitarias.'}</p>
       <div className="sw-library-filters">
         <Field
           label="Buscar evaluación"
@@ -134,7 +134,7 @@ function TestRows({
       <PagedList
         className="sw-test-grid"
         label="evaluaciones"
-        resetKey={query + status}
+        resetKey={level + query + status}
       >
         {filtered.map(({ test, count, submission }) => {
           const presentation = instrumentPresentation(test),
@@ -274,7 +274,7 @@ export function CompactDashboard() {
   const battery=assignedBattery.filter(r=>!r.test.educationLevel||r.test.educationLevel==='ambos'||r.test.educationLevel===level);
   const complete = battery.filter((r) => r.submission).length,
     next = battery.find((r) => !r.submission && !availability(r.test)),
-    last = reports.find((r) => r.status === "available");
+    last = reports.find((r) => r.status === "available"&&reportEducationLevel(r,s.values['rv360:profile'])===level);
   return (
     <>
       <PageHeader
@@ -326,7 +326,7 @@ export function CompactDashboard() {
           />
         </div>
       </Card>
-      {last&&<Card className="stack"><span className="eyebrow">TU RUTA: BACHILLERATO → UNIVERSIDAD</span><h2>{last.analysis?.pathway?.title||'Tu orientación de bachillerato'}</h2><p>{last.analysis?.pathway?.reason||'Explora las recomendaciones de Ciencias, especialidades técnicas y carreras universitarias relacionadas con tus respuestas.'}</p><Link className="button button--primary" href="/mi-ruta/resultados">Ver sugerencias y recomendaciones</Link></Card>}
+      {last&&<Card className="stack"><span className="eyebrow">{level==='bachillerato'?'TU RUTA DE BACHILLERATO':'TU RUTA UNIVERSITARIA'}</span><h2>{level==='bachillerato'?last.analysis?.pathway?.title||'Tu orientación de bachillerato':'Tus carreras universitarias recomendadas'}</h2><p>{level==='bachillerato'?last.analysis?.pathway?.reason||'Compara Ciencias y las figuras profesionales técnicas relacionadas con tus respuestas.':last.analysis?.summary||'Explora las carreras relacionadas con tus intereses y habilidades.'}</p><Link className="button button--primary" href="/mi-ruta/resultados">Ver sugerencias y recomendaciones</Link></Card>}
       <TrainingSummary />
       <section className="compact-section">
         <div className="section-title">
@@ -359,7 +359,10 @@ export function CompactDashboard() {
   );
 }
 export function CompactTests() {
-  const { all, frozen } = useAssignedTests(),
+  const { all: assigned, frozen } = useAssignedTests(),
+    profile=useSession().values['rv360:profile'],
+    level=defaultPreparationLevel(profile),
+    all=assigned.filter(r=>!r.test.educationLevel||r.test.educationLevel==='ambos'||r.test.educationLevel===level),
     done = all.filter((r) => r.submission).length,
     progress = all.filter((r) => !r.submission && r.count > 0).length,
     percent = all.length ? Math.round((done / all.length) * 100) : 0;

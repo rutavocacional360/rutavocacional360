@@ -53,7 +53,7 @@ export function schoolGuidance(scores: {dimension:string;raw:number}[], evidence
     bridge:'Ciencias y Técnico permiten continuar hacia educación superior. Las conexiones siguientes son ejemplos para explorar, no requisitos de ingreso ni restricciones de carrera.',
     notes:[
       'En Ciencias se muestran áreas de exploración, no carreras ni especializaciones oficiales del título.',
-      'En Técnico se muestran las 34 figuras profesionales del catálogo del Acuerdo 2024-00065-A, cuya implementación es progresiva. Confirma con el colegio el nombre vigente, la oferta, los talleres y los requisitos; el catálogo escolar no acredita disponibilidad de especialidades.',
+      'En Técnico se muestran las 34 figuras profesionales del catálogo del Acuerdo 2024-00065-A reformado por el Acuerdo 2025-00051-A, cuya implementación es progresiva. Confirma con el colegio el nombre vigente, la oferta, los talleres y los requisitos; el catálogo escolar no acredita disponibilidad de especialidades.',
       'Afinidad describe intereses y preferencias declaradas; no certifica aptitud, rendimiento ni admisión.',
     ],
     nextSteps:[

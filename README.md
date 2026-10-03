@@ -13,6 +13,28 @@ Trabaja y despliega desde esta misma carpeta; no se necesita generar otro proyec
 
 ## Orientación de Bachillerato y Universidad
 
+La etapa registrada controla una única ruta: EGB Superior y elección de bachillerato
+muestran Bachillerato; estudiantes de BGU, graduados y quienes buscan su primera
+carrera reciben Universidad. Tests, progreso, resultados, PDF y preparación siguen
+esa ruta. Cada entrega nueva guarda su nivel; al cambiar de etapa se conserva el
+historial y los resultados escolares no completan los tests universitarios.
+
+El catálogo técnico usa las 34 figuras y 11 familias del Acuerdo
+MINEDEC-MINEDEC-2025-00051-A, reforma del catálogo de 2024. Conserva identificadores
+para las asignaciones existentes. La oferta complementaria de Artes se documenta
+por separado, con sus requisitos propios.
+
+Con todos los tests de la ruta completos y sus resultados publicados, el servidor
+solicita a Gemini una interpretación de puntuaciones agregadas y candidatos
+verificados. No envía nombres, correo ni respuestas abiertas. La IA explica
+intereses y opciones; no certifica aptitud. `GEMINI_API_KEY` y `GEMINI_MODEL` son
+variables privadas de Hostinger. La caché y el presupuesto diario se guardan en
+MySQL. `AI_GUIDANCE_DAILY_REQUEST_LIMIT` limita solicitudes nuevas (por defecto 200).
+Administración → Configuración muestra el último éxito o error real. Un fallo del
+proveedor conserva las respuestas y la orientación local, con un estado visible;
+el informe solo indica análisis con IA después de una respuesta válida.
+
+
 La orientación distingue dos rutas: EGB Superior hacia BGU (Bachillerato) y BGU hacia
 educación superior (Universidad). El registro pide la etapa educativa sin obligar a
 elegir modalidad. Los tests pueden dirigirse a una ruta o a ambas; sus resultados se
@@ -78,7 +100,7 @@ Los catálogos de evaluación y orientación son contenido del sistema, no regis
 
 ## Comprobar el despliegue
 
-Antes de publicar, ejecuta `npm test` (22 suites aisladas), `npm run build` y
+Antes de publicar, ejecuta `npm test` (29 suites aisladas), `npm run build` y
 `npm run test:integration`. La integración usa SQLite temporal por defecto;
 con `GUIDANCE_DB_DRIVER=mysql` exige una base MySQL local terminada en `_test`.
 `npm run test:startup` comprueba el arranque real, el puerto y la conservación del
@@ -213,8 +235,7 @@ permite guardar opcionalmente una modalidad ya cursada y su especialidad. No se 
 que la persona ya cursó con la recomendación que obtiene. Las cuentas anteriores pueden
 completar estos campos sin perder datos; no se modifica el esquema de MySQL.
 
-Mis resultados muestra primero el perfil y la comparación Ciencias/Técnico; después,
-áreas de Ciencias o figuras técnicas, actividades y conexiones universitarias. Administración
+Mis resultados muestra solo la ruta correspondiente a la etapa registrada: Ciencias/Técnico y figuras profesionales para Bachillerato, o carreras para Universidad. Administración
 consulta la misma orientación y puede actualizarla desde la ficha del estudiante. Pantalla y
 PDF utilizan el mismo informe guardado. Las versiones antiguas se conservan como historial.
 

@@ -5,7 +5,7 @@ import { schoolGuidance } from './school-guidance';
 import { pathwayVersion, type SchoolProfile } from '../data/baccalaureate';
 
 export const GUIDANCE_RULES_VERSION = 'school-university-guidance-5';
-type GuidanceInput = { catalog?: typeof defaultCatalog; content?: {id:string;source:string;model:string|null;areas:typeof defaultContent.areas;categories:typeof defaultContent.categories}; profile?:SchoolProfile };
+type GuidanceInput = { educationLevel?:'bachillerato'|'universidad'; catalog?: typeof defaultCatalog; content?: {id:string;source:string;model:string|null;areas:typeof defaultContent.areas;categories:typeof defaultContent.categories}; profile?:SchoolProfile };
 
 /** The same saved answers drive the screen, PDF and course recommendations. */
 export function localGuidance(user:any,submissions:any[],assignedIds:string[]=['intereses','valores','autoconocimiento'], input:GuidanceInput={}){
@@ -20,7 +20,7 @@ export function localGuidance(user:any,submissions:any[],assignedIds:string[]=['
  // Give each completed instrument equal weight, independent of its scale and item count.
  const codes=['R','I','A','S','E','C'];
  const allInterests=instruments.filter(s=>s.instrument.scoring!=='manual'&&rows.find(r=>r.id===s.id)?.evaluation?.state==='complete'&&s.scores.length===6&&new Set(s.scores.map((v:any)=>v.dimension)).size===6&&s.scores.every((v:any)=>codes.includes(v.dimension)&&Number.isFinite(v.value)&&Number.isFinite(v.min)&&Number.isFinite(v.max)&&v.max>v.min&&v.value>=v.min&&v.value<=v.max));
- const interests=allInterests.filter(s=>s.instrument.educationLevel!=='bachillerato');
+ const interests=allInterests.filter(s=>input.educationLevel==='bachillerato'?s.instrument.educationLevel!=='universidad':s.instrument.educationLevel!=='bachillerato');
  const schoolInterests=allInterests.filter(s=>s.instrument.educationLevel!=='universidad');
  const interest=interests[0];
  const scores=interest?codes.map(dimension=>({dimension,raw:5+20*interests.reduce((sum,s)=>{const v=s.scores.find((v:any)=>v.dimension===dimension);return sum+(v.value-v.min)/(v.max-v.min);},0)/interests.length})):[];

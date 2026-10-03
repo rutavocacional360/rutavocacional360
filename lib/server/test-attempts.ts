@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { db, document, put, fail, assigned } from "./store";
 import { instrumentFor } from "./battery";
+import {studentEducationLevel,testMatchesLevel,submissionRoutes} from "./assessment-route";
 import { answerKey } from "@/components/kit/data/instruments";
 import { calculateTest, Reviews } from "@/components/kit/lib/test-engine";
 export async function startTest(user: any, id: string) {
@@ -24,6 +25,7 @@ async function startTestInner(user: any, id: string) {
     .get(user.id, id)) as any;
   if (open) {
     const old = JSON.parse(open.snapshot);
+    if(!testMatchesLevel(old,await studentEducationLevel(user)))fail("Este intento pertenece a otra ruta educativa. Revisa tu etapa en Mi perfil.",409);
     if (
       !old.durationMinutes ||
       Date.now() <= Date.parse(open.started_at) + old.durationMinutes * 60000
@@ -49,22 +51,17 @@ async function startTestInner(user: any, id: string) {
   if ((t.availableFrom && today < t.availableFrom) || (t.due && today > t.due))
     fail("El test está fuera de su plazo de disponibilidad.", 409);
   const stable = t.stableId || id;
-  const count = (
-    (await db
-      .prepare(
-        "SELECT COUNT(*) n FROM assessment_attempts WHERE user_id=? AND stable_id=?",
-      )
-      .get(user.id, stable)) as any
-  ).n;
+  const routeOf=await submissionRoutes(user,await studentEducationLevel(user));
+  const count = (await db.prepare('SELECT snapshot,submission_id FROM assessment_attempts WHERE user_id=? AND stable_id=?').all(user.id,stable) as any[]).filter(a=>routeOf({id:a.submission_id,snapshot:a.snapshot})===t.educationLevel).length;
   const historic = (
     (await db
       .prepare(
-        "SELECT snapshot FROM submissions s WHERE user_id=? AND NOT EXISTS (SELECT 1 FROM assessment_attempts a WHERE a.submission_id=s.id)",
+        "SELECT id,snapshot FROM submissions s WHERE user_id=? AND NOT EXISTS (SELECT 1 FROM assessment_attempts a WHERE a.submission_id=s.id)",
       )
       .all(user.id)) as any[]
   ).filter((s) => {
     const x = JSON.parse(s.snapshot);
-    return (x.stableId || x.id) === stable;
+    return (x.stableId || x.id) === stable&&routeOf(s)===t.educationLevel;
   }).length;
   if (t.maxAttempts && count + historic >= t.maxAttempts)
     fail("Alcanzaste el límite de intentos de este test.", 409);

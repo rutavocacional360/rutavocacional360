@@ -26,6 +26,8 @@ try{
   globalThis.__trainingFixture.readiness[level]=readiness(true);
   const ready=renderToStaticMarkup(React.createElement(StudentCourses));
   assert(ready.includes(level==='bachillerato'?'Opción escolar QA':'Opción universitaria QA'));assert(ready.includes('Autopreparación'));
+  assert(!ready.includes(level==='bachillerato'?'Opción universitaria QA':'Opción escolar QA'),'Unlocked route must still hide opposite-route courses');
+  assert(!locked.includes('aria-label="Nivel de preparación"')&&!ready.includes('aria-label="Nivel de preparación"'),'Students cannot switch to a route inconsistent with their registered stage');
  }
  console.log('PASS rendered courses UI: both routes show pending tests, hide stale recommendations, and unlock relevant preparation only after completion.');
 }finally{delete globalThis.__trainingProfile;delete globalThis.__trainingFixture;}

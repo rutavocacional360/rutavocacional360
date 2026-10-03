@@ -140,6 +140,7 @@ export async function platformInstitution() {
   return org;
 }
 export async function assigned(test: any, user: any) {
+  if(user.role==='student'){const {studentEducationLevel,testMatchesLevel}=await import('./assessment-route');if(!testMatchesLevel(test,await studentEducationLevel(user)))return false;}
   const platform = await document("system", "rv360:platform");
   return (
     test.status === "Publicado" &&

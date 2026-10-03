@@ -4,6 +4,8 @@ import { instruments, answerKey } from "@/components/kit/data/instruments";
 import { db, document, put, assigned, studentInstrument, fail } from "./store";
 import { asyncFind, asyncFilter } from "@/lib/server/async-collections";
 
+import {studentEducationLevel,testMatchesLevel,routeTest} from './assessment-route';
+
 export async function availableOriginals(user: any) {
   const owner = "institution:" + user.institutionId;
   const statuses = await document(owner, "rv360:admin-original-status", {});
@@ -12,8 +14,9 @@ export async function availableOriginals(user: any) {
 }
 
 export async function currentAssessments(user: any) {
+  const level=await studentEducationLevel(user);
   const custom = await asyncFilter(await document("institution:" + user.institutionId, "rv360:custom-tests", []), async (t: any) => await assigned(t, user));
-  return [...await availableOriginals(user), ...custom];
+  return [...await availableOriginals(user), ...custom].filter(t=>testMatchesLevel(t,level)).map(t=>routeTest(t,level));
 }
 
 export async function battery(user: any, freeze = false) {
@@ -32,19 +35,18 @@ export async function battery(user: any, freeze = false) {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
       frozen: freeze,
-      instruments: [...await availableOriginals(user), ...custom],
+      instruments: await currentAssessments(user),
     };
     if (freeze) await put(user.id, "rv360:battery", run);
   }
-  return run;
+  return {...run,instruments:await currentAssessments(user)};
 }
 export async function batteryForClient(user: any) {
   const run = await battery(user);
-  const originals = run ? await availableOriginals(user) : [];
   return run
     ? {
         ...run,
-        instruments: [...run.instruments, ...originals.filter(t => !run.instruments.some((saved: any) => saved.id === t.id))].map((t: any) => studentInstrument(t)),
+        instruments: run.instruments.map((t: any) => studentInstrument(t)),
       }
     : null;
 }
@@ -64,17 +66,18 @@ export async function batterySubmissions(user: any) {
   return { run, rows, complete: rows.every(Boolean) };
 }
 export async function instrumentFor(user: any, id: string) {
+  const level=await studentEducationLevel(user);
   const open = (await db
     .prepare(
       "SELECT snapshot FROM assessment_attempts WHERE user_id=? AND instrument_id=? AND state='in_progress'",
     )
     .get(user.id, id)) as any;
-  if (open) return JSON.parse(open.snapshot);
+  if (open) {const snapshot=JSON.parse(open.snapshot);return testMatchesLevel(snapshot,level)?routeTest(snapshot,level):undefined;}
   const originals = await availableOriginals(user);
   if (instruments.some(t => t.id === id) && !originals.some(t => t.id === id)) return undefined;
   const current = (await document("institution:" + user.institutionId, "rv360:custom-tests", [])).find((t: any) => t.id === id);
   if (current && !(await assigned(current, user))) return undefined;
-  return (
+  const selected = (
     (await battery(user))?.instruments.find((t: any) => t.id === id) ||
     originals.find(t => t.id === id) ||
     (await asyncFind(
@@ -86,6 +89,7 @@ export async function instrumentFor(user: any, id: string) {
       async (t: any) => t.id === id && (await assigned(t, user)),
     ))
   );
+  return selected&&testMatchesLevel(selected,level)?routeTest(selected,level):undefined;
 }
 export async function validateDraft(user: any, key: string, value: any) {
   const run = await battery(user, true);

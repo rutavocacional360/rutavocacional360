@@ -8,6 +8,8 @@ import {
   applyCatalog,
 } from "./ecuador-catalog";
 import { degreeOffer } from "./academic-content.mjs";
+import {schoolCatalogSource} from '@/components/kit/data/baccalaureate';
+import {studentEducationLevel} from './assessment-route';
 import { ensureGuidance } from "./guidance";
 import { assessmentReadiness, requireCompletedAssessments } from "./assessment-readiness";
 import {
@@ -556,6 +558,7 @@ export async function trainingState(u: User) {
     };
   student(u);
   const readiness = await assessmentReadiness(u);
+  const educationLevel=await studentEducationLevel(u);
   const recs = await recommendations(u),
     goal = (await document(u.id, "training:goal", {
       careerIds: [],
@@ -571,6 +574,10 @@ export async function trainingState(u: User) {
     );
   return {
     ...catalog,
+    educationLevel,
+    source:educationLevel==='bachillerato'?schoolCatalogSource:catalog.source,
+    institutions:educationLevel==='bachillerato'?[]:catalog.institutions,
+    careers:catalog.careers.filter(c=>preparationLevel([c.id])===educationLevel),
     simulators: unique((await rows(u, "simulator")).filter((s) => s.status !== "draft"))
       .filter(
         (s: Simulator) =>
@@ -1301,7 +1308,8 @@ export async function trainingAction(
     return await enroll(u, String(b.courseId), b.studentId);
   if (path === "training/goal" && method === "PUT") {
     student(u);
-    const cat = trainingCatalog();
+    const cat = trainingCatalog(),level=await studentEducationLevel(u);
+    cat.careers=cat.careers.filter(c=>preparationLevel([c.id])===level);
     if (
       !Array.isArray(b.careerIds) ||
       b.careerIds.some((id: string) => !cat.careers.some((c) => c.id === id)) ||

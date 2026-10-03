@@ -21,6 +21,7 @@ import { calculateTest } from "@/components/kit/lib/test-engine";
 import { educationProfile } from "@/lib/server/education";
 import { manageUser, adminAnalytics } from "@/lib/server/admin-management";
 import { refreshAcademicContent, readAcademic } from "@/lib/server/academic-content.mjs";
+import {readStudentGuidanceAIStatus} from '@/lib/server/student-guidance-ai';
 import { providerReady } from "@/lib/server/ai-provider";
 import {
   updateProfile,
@@ -277,7 +278,7 @@ async function handle(
       } else if (action === "admin/orientation-content" && req.method === "GET") {
         await requireUser(true);
         const content = readAcademic();
-        result = { configured: providerReady(), source: content.source, model: content.model, contentId: content.id };
+        result = { configured: providerReady(), source: content.source, model: content.model, contentId: content.id, studentAnalysis:await readStudentGuidanceAIStatus() };
       } else if (
         action === "admin/orientation-content" &&
         req.method === "POST"

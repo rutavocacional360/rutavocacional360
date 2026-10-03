@@ -14,19 +14,19 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  const admin=async(path,body,status)=> (await request(path,body,adminCookie,body?'POST':'GET',status)).value;
  const student=async(path,body,method,status)=> (await request(path,body,cookie,method,status)).value;
  const before=await student('training');assert.equal(before.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length,0);
- assert.equal(before.readiness.bachillerato.ready,false);
+ assert.equal(before.educationLevel,'bachillerato');assert.equal(before.readiness.bachillerato.ready,false);assert.equal(before.readiness.universidad.total,0);assert(before.careers.every(c=>c.id.startsWith('bachillerato:')));assert(registration.value.values['rv360:battery'].instruments.every(t=>t.educationLevel==='bachillerato'));
  const blank={id:'',version:0,revision:0,status:'published',title:'',instrument:{id:'qa',version:'1',title:'',description:'',options:[],questions:[]},purpose:'general',modes:['practice','exam'],durationMinutes:30,maxAttempts:2,gradePolicy:'last',feedback:'finish',selection:'fixed',quotas:[],areaWeights:[],questions:[],shuffleOptions:false,questionOrderFixedIds:[]};
  const lockedSimulator=await admin('training/entity',{kind:'simulator',entity:schoolPracticeTemplate(blank,'ciencias')});
  await student('training/simulator/start',{simulatorId:lockedSimulator.id,mode:'practice'},'POST',409);
  assert.equal((await student('training')).simulators.length,0);
  for(const test of registration.value.values['rv360:battery'].instruments){
-  await student('assessments/start',{instrumentId:test.id});
+  const begun=await student('assessments/start',{instrumentId:test.id});assert.equal(JSON.parse(begun.snapshot).educationLevel,'bachillerato');
   const answers=Object.fromEntries(test.questions.map(q=>[q.id,q.dimension&&['R','I'].includes(q.dimension)?5:(q.options||test.options)[0].value]));
   await student('state',{key:'rv360:answers:'+test.id+':'+test.version,value:answers,revision:0},'PUT');
   await student('assessments/submit',{instrumentId:test.id});
  }
  assert((await student('training')).readiness.bachillerato.ready);
- const universityRecommendations=(await student('training')).recommendations.filter(r=>!r.careerId.startsWith('bachillerato:')).map(r=>r.careerId);
+ const universityRecommendations=(await student('training')).recommendations.filter(r=>!r.careerId.startsWith('bachillerato:')).map(r=>r.careerId);assert.deepEqual(universityRecommendations,[]);
 
  await admin('training/delete-simulator',{kind:'simulator',id:lockedSimulator.id,version:lockedSimulator.version,revision:lockedSimulator.revision});
  const created=[];
@@ -56,7 +56,7 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  await student('assessments/start',{instrumentId:t.id});
  await student('state',{key:'rv360:answers:'+t.id+':'+t.version,value:answers,revision:0},'PUT');
  await student('assessments/submit',{instrumentId:t.id});
- const report=(await student('reports/guidance')).items[0];assert.equal(report.analysis.pathway.suggested,'tecnico');assert.deepEqual(report.analysis.recommendations.map(r=>r.careerId),universityRecommendations);
+ const report=(await student('reports/guidance')).items[0];assert.equal(report.educationLevel,'bachillerato');assert.deepEqual(report.catalog,[]);assert.equal(report.readiness.universidad.total,0);assert.equal(report.analysis.pathway.suggested,'tecnico');assert.deepEqual(report.analysis.recommendations.map(r=>r.careerId),universityRecommendations);
  const archived=await admin('training/archive',{kind:'simulator',id:created[1].id,version:created[1].version,revision:created[1].revision});assert(archived);
  assert(!(await student('training')).simulators.some(s=>s.id===created[1].id));
  assert((await student('training')).attempts.some(a=>a.simulator.id===created[1].id&&a.result.percent===100));
@@ -71,6 +71,26 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  assert(!(await student('session')).values['rv360:custom-tests'].some(item=>item.id===t.id));
  current=await admin('session');
  await request('state',{key:'rv360:custom-tests',value:current.values['rv360:custom-tests'].map(item=>item.id===t.id?{...item,status:'Archivado'}:item),revision:current.revisions['rv360:custom-tests']},adminCookie,'PUT');
+ // Graduation switches the assigned tests and requires fresh university answers.
+ await student('account/profile',{firstName:'Estudiante',lastName:'QA',stage:'Me gradu\u00e9 del colegio',baccalaureate:'tecnico',specialty:'Soporte inform\u00e1tico',learningPreference:'aplicar'},'PUT');
+ const graduated=await student('session');assert(graduated.values['rv360:battery'].instruments.every(t=>t.educationLevel==='universidad'));assert(!graduated.values['rv360:custom-tests'].some(item=>item.educationLevel==='bachillerato'));
+ assert(!Object.keys(graduated.values).some(key=>key.startsWith('rv360:answers:')),'Changing route clears only draft answer documents');
+ await student('state',{key:'rv360:assessment-route-origins',value:Object.fromEntries(report.instruments.map(item=>[item.id,'universidad'])),revision:0},'PUT',403);
+ const oldSubmissionIds=new Set((graduated.values['rv360:submissions']||[]).map(item=>item.id));
+ await student('assessments/submit',{instrumentId:graduated.values['rv360:battery'].instruments[0].id},'POST',409);
+ const withoutNewAttempt=await student('session');assert.deepEqual(new Set((withoutNewAttempt.values['rv360:submissions']||[]).map(item=>item.id)),oldSubmissionIds,'Submitting without new-route answers cannot create a new result');
+ const universityLocked=await student('training');assert.equal(universityLocked.educationLevel,'universidad');assert.equal(universityLocked.readiness.bachillerato.total,0);assert.equal(universityLocked.readiness.universidad.ready,false);assert.equal(universityLocked.readiness.universidad.completed,0);assert.deepEqual(universityLocked.recommendations,[]);assert(universityLocked.careers.every(c=>!c.id.startsWith('bachillerato:')));
+ await student('reports/guidance',{},'POST',409);
+ for(const test of graduated.values['rv360:battery'].instruments){
+  const begun=await student('assessments/start',{instrumentId:test.id});assert.equal(JSON.parse(begun.snapshot).educationLevel,'universidad');
+  const active=await student('session'),key='rv360:answers:'+test.id+':'+test.version;
+  const answers=Object.fromEntries(test.questions.filter(q=>q.type!=='info').map(q=>[q.id,q.dimension==='I'?5:q.dimension?2:(q.options||test.options)[0].value]));
+  await student('state',{key,value:answers,revision:active.revisions[key]||0},'PUT');
+  await student('assessments/submit',{instrumentId:test.id});
+ }
+ const universityReport=(await student('reports/guidance')).items.find(r=>!r.historical);assert(universityReport);assert.equal(universityReport.educationLevel,'universidad');assert.equal(universityReport.analysis.pathway,undefined);assert(universityReport.readiness.universidad.ready);assert(universityReport.analysis.recommendations.length);assert(universityReport.instruments.every(i=>i.instrument.educationLevel==='universidad'));
+ const universityTraining=await student('training');assert(universityTraining.recommendations.every(r=>!r.careerId.startsWith('bachillerato:')));assert(!universityTraining.simulators.some(s=>created.some(old=>s.id===old.id)));assert(universityTraining.attempts.some(a=>a.simulator.id===created[1].id&&a.result.percent===100),'Existing school grades remain in history');
+ console.log('PASS HTTP route change: explicit assessment snapshots, school-only catalog and recommendations, graduates see university-only tests, new university results and retained school history.');
  console.log('PASS HTTP admin CRUD: stale restore rejected, restore/delete persisted, test soft deletion and recovery, student visibility and retained grades.');
  console.log('PASS HTTP school workflow: EGB registration, undecided profile, admin drafts/publication, invalid levels/targets, hidden keys, practice/resume/grades, scoped orientation and archived history.');
  return {cookie,created};

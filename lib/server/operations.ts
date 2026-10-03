@@ -1,3 +1,4 @@
+import {submissionRoutes} from './assessment-route';
 import { nameProblem, emailProblem, textProblem, settingsProblem, studentDocumentProblem } from "../validation";
 import { ecuadorCareers, careerOffers, catalogSource } from "./ecuador-catalog";
 import { calculateTest } from "@/components/kit/lib/test-engine";
@@ -54,6 +55,7 @@ async function saveDocumentInner(
       "rv360:published-content",
       "rv360:imports",
       "rv360:battery",
+      "rv360:assessment-route-origins",
       "rv360:email-change",
       "rv360:profile",
     ].includes(key)
@@ -364,17 +366,12 @@ async function submitAssessmentInner(user: any, id: string) {
   const serialized = JSON.stringify(answers);
   const prior = await db
     .prepare(
-      "SELECT id FROM submissions WHERE user_id=? AND instrument_id=? AND version=? AND answers=?",
+      "SELECT id,snapshot FROM submissions WHERE user_id=? AND instrument_id=? AND version=? AND answers=? ORDER BY created_at DESC",
     )
     .get(user.id, id, instrument.version, serialized);
-  if (prior && !openAttempt) return prior;
-  const count = (
-    (await db
-      .prepare(
-        "SELECT COUNT(*) n FROM submissions WHERE user_id=? AND instrument_id=? AND version=?",
-      )
-      .get(user.id, id, instrument.version)) as any
-  ).n;
+  if (prior && !openAttempt && JSON.parse((prior as any).snapshot).educationLevel===instrument.educationLevel) return {id:(prior as any).id};
+  const routeOf=await submissionRoutes(user,instrument.educationLevel);
+  const count = (await db.prepare('SELECT id,snapshot FROM submissions WHERE user_id=? AND instrument_id=? AND version=?').all(user.id,id,instrument.version) as any[]).filter(row=>routeOf(row)===instrument.educationLevel).length;
   if (instrument.maxAttempts && count >= instrument.maxAttempts)
     fail("Alcanzaste el número de intentos permitidos.");
   const attempt = (await db
@@ -382,9 +379,11 @@ async function submitAssessmentInner(user: any, id: string) {
       "SELECT * FROM assessment_attempts WHERE user_id=? AND instrument_id=? ORDER BY started_at DESC LIMIT 1",
     )
     .get(user.id, id)) as any;
-  if (attempt?.state === "submitted") return { id: attempt.submission_id };
-  if (instrument.schemaVersion === 2 && !attempt)
+  if (attempt?.state === "submitted" && JSON.parse(attempt.snapshot).educationLevel===instrument.educationLevel) return { id: attempt.submission_id };
+  if (instrument.schemaVersion === 2 && !openAttempt)
     fail("Confirma el inicio del intento antes de responder.");
+  if(!openAttempt&&attempt&&(attempt.state==='expired'||JSON.parse(attempt.snapshot).educationLevel!==instrument.educationLevel))fail('Inicia un nuevo intento de esta ruta antes de enviar respuestas.',409);
+  if(!Object.keys(answers).length)fail('Responde el test de esta ruta antes de enviarlo.',409);
   const scores = evaluateInstrument(instrument, answers);
   const record = {
     id: randomUUID(),
@@ -407,12 +406,12 @@ async function submitAssessmentInner(user: any, id: string) {
       )
       .run(record.id, JSON.stringify(calculated), record.created_at);
   }
-  if (attempt)
+  if (openAttempt)
     await db
       .prepare(
         "UPDATE assessment_attempts SET state='submitted',submission_id=? WHERE id=?",
       )
-      .run(record.id, attempt.id);
+      .run(record.id, openAttempt.id);
   return { id: record.id };
 }
 
