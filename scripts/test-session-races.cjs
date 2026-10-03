@@ -1,0 +1,48 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
+const source=ts.transpileModule(fs.readFileSync('components/kit/lib/session.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const requests=[],catalogs=[];
+const context={exports:{},sessionStorage:{},localStorage:{},fetch:(url)=>new Promise((resolve,reject)=>requests.push({url,resolve,reject})),require:(name)=>{
+ if(name==='react')return {};
+ if(name==='./api-response')return {readApiResponse:response=>response.json()};
+ if(name==='../data/instruments')return {configureInstruments:()=>{}};
+ if(name==='./catalog')return {configureCatalog:value=>catalogs.push(value)};
+ throw Error('Unexpected import: '+name);
+}};
+vm.runInNewContext(source,context);
+const session=context.exports;
+const payload=name=>({user:{id:name},values:{'rv360:published-content':[name]},revisions:{}});
+const finish=(index,data)=>requests[index].resolve(Response.json(data));
+(async()=>{
+ let first=session.refreshSession(),second=session.refreshSession();
+ finish(1,payload('new'));await second;finish(0,payload('old'));await first;
+ assert.equal(session.getSession().user.id,'new','An older response cannot replace newer session data');
+ assert.deepEqual(catalogs,[['new']],'Stale responses cannot replace the catalog');
+ first=session.refreshSession();second=session.refreshSession();
+ finish(3,payload('latest'));await second;requests[2].reject(Error('Old network error'));await first;
+ assert.equal(session.getSession().error,'','An obsolete failure cannot block subsequent saves');
+ first=session.refreshSession();const saved=session.saveValue('draft','edited');
+ await Promise.resolve();finish(5,{revision:1});await saved;
+ requests[4].reject(Error('Failure before edit'));await first;
+ assert.equal(session.getSession().values.draft,'edited');await session.flush();
+ first=session.refreshSession();second=session.refreshSession();
+ const logout=session.logout();
+ // logout first waits for queued saves to finish.
+ for(let tick=0;tick<10&&requests.length<9;tick++)await Promise.resolve();
+ assert.equal(requests.length,9,'Logout must request server-side sign-out');
+ assert.equal(requests[8].url,'/api/auth/logout');finish(8,{});await logout;
+ finish(6,payload('signed-out-user'));requests[7].reject(Error('Late failure'));
+ await Promise.all([first,second]);
+ assert.equal(session.getSession().user,null,'Late requests cannot restore a signed-out user');
+ assert.equal(session.getSession().error,'');
+ assert.equal(Object.keys(session.getSession().values).length,0);
+ first=session.refreshSession();requests[9].reject(Error('Current failure'));await first;
+ assert.equal(session.getSession().error,'Current failure','Current failures remain visible');
+ first=session.refreshSession();finish(10,payload('recovered'));await first;
+ assert.equal(session.getSession().error,'','A recovered connection clears the transient error');
+ await session.flush();
+ const failedSave=session.saveValue('draft','unsaved');await Promise.resolve();
+ requests[11].reject(Error('Save failed'));await assert.rejects(failedSave,/Save failed/);
+ first=session.refreshSession();finish(12,payload('recovered'));await first;
+ await assert.rejects(session.flush(),/Save failed/,'Refreshing cannot hide an unsaved edit');
+ console.log('PASS session races: response ordering, obsolete errors, edits, logout and current failures.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

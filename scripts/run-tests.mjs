@@ -19,6 +19,7 @@ const tests = [
   'test-document-import.mjs', 'test-assessment-import.mjs', 'test-local-guidance.cjs', 'test-guidance-normalization.cjs', 'test-guidance-normalization-server.mjs',
   'test-school-guidance.cjs', 'test-guidance-ui.mjs',
   'test-admin-session-renewal.cjs', 'test-guidance-server.mjs',
+  'test-session-races.cjs',
 ];
 let failures = 0;
 for (const test of tests) {
