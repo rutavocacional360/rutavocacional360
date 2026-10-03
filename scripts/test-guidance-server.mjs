@@ -79,7 +79,7 @@ try{
   const privateDir=mkdtempSync(resolve(tmpdir(),'rv360-http-'));
   const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3026'],{env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
     IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),
-    ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:'',
+    ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:db.driver==='mysql'?'isolated-ci-not-a-provider-key':'',
     SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM:'',SMTP_SECURE:'',
     API_ORIGIN:'',VERCEL:'',NEXT_PUBLIC_DESIGN_PREVIEW:''},stdio:'pipe',windowsHide:true});
   const stopped=new Promise(resolve=>{child.once('exit',resolve);child.once('error',resolve);});
@@ -107,10 +107,12 @@ try{
    const unchanged=await (await request('session',null,cookie)).json();assert.equal(unchanged.values['rv360:profile'].specialty,'Informática','Invalid updates cannot alter persisted profile');
    const adminLogin=await request('auth/login',{email:'admin@example.test',password,admin:true});assert.equal(adminLogin.status,200);
    const adminCookie=adminLogin.headers.get('set-cookie').split(';')[0];
-   const aiStatus=await request('admin/orientation-content',null,adminCookie);assert.equal(aiStatus.status,200);assert.equal((await aiStatus.json()).configured,false);
-   assert.equal((await request('admin/orientation-content',{},adminCookie)).status,503);
+   // MySQL production bootstrap requires a configured key. Never call a real provider
+   // from integration tests; missing credentials are exercised by the SQLite run.
+   const aiStatus=await request('admin/orientation-content',null,adminCookie);assert.equal(aiStatus.status,200);assert.equal((await aiStatus.json()).configured,db.driver==='mysql');
+   if(db.driver!=='mysql')assert.equal((await request('admin/orientation-content',{},adminCookie)).status,503);
    assert.equal((await request('admin/orientation-content',null,cookie)).status,403);
-   console.log('PASS HTTP AI: protected administrator status and actionable missing-credential response without provider calls.');
+   console.log('PASS HTTP AI: protected administrator status without provider calls.');
    const refreshed=await request('reports/guidance',{studentId:user.id},adminCookie);assert.equal(refreshed.status,200);assert.equal((await refreshed.json()).analysis.pathway.profile.specialty,'Informática');
    assert.equal((await fetch(base+'/mi-ruta/resultados',{headers:{Cookie:cookie}})).status,200);
    assert.equal((await fetch(base+'/admin/resultados',{headers:{Cookie:adminCookie}})).status,200);
