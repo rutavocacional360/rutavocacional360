@@ -18,7 +18,9 @@ export function PdfViewer({src,title}:{src?:string;title:string}){
   setDocument(null);setPage(1);setZoom(1);setBusy(true);setError('');setText('');
   if(src)void import('pdfjs-dist').then(async pdfjs=>{
    if(!active)return;
-   pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker.min.mjs';
+   // The hosting CDN serves .mjs as text/plain, which module workers reject.
+   // Match the installed API version and bypass cached workers from older builds.
+   pdfjs.GlobalWorkerOptions.workerSrc=`/vendor/pdfjs-${pdfjs.version}.worker.js`;
    task=pdfjs.getDocument({url:src});
    const doc=await task.promise;if(active)setDocument(doc);
   }).catch(()=>{if(active){setBusy(false);setError('No pudimos cargar el PDF. Puedes reintentarlo o abrir el archivo con el botón del informe.');}});

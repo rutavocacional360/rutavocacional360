@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
-import {mkdtempSync} from 'node:fs';
+import {mkdtempSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:net';
@@ -11,6 +11,7 @@ import {createRuntimePackage} from './test-runtime-package.mjs';
 
 assertTestDatabase(process.env,{local:true});
 const runtime = await createRuntimePackage();
+const pdfjsVersion = JSON.parse(readFileSync(new URL('../node_modules/pdfjs-dist/package.json', import.meta.url), 'utf8')).version;
 const privateDir=mkdtempSync(join(tmpdir(),'rv360-start-'));
 const listener=createServer();
 await new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',resolve);});
@@ -44,6 +45,10 @@ for(const [direct,restart] of [[true,false],[false,true],[true,true]]){
       await new Promise(resolve=>setTimeout(resolve,200));
     }
     assert(ready,'Hostinger startup must expose a healthy MySQL backend\n'+diagnostic());
+    const worker = await fetch(base+`/vendor/pdfjs-${pdfjsVersion}.worker.js`);
+    assert.equal(worker.status,200,'The deployed PDF worker must be included in the runtime package');
+    assert.match(worker.headers.get('content-type')||'',/^(?:text|application)\/(?:javascript|ecmascript)\b/i,'Module workers require a JavaScript MIME type');
+    assert((await worker.text()).includes(`pdfjsVersion = ${pdfjsVersion}`),'The deployed worker must match the PDF.js client version');
     const response=await fetch(base+'/api/auth/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:JSON.stringify({email:env.ADMIN_EMAIL,password:env.ADMIN_PASSWORD,admin:true})});
     assert.equal(response.status,200,'Initial password must survive a restart');
     const {user}=await response.json();
@@ -52,9 +57,23 @@ for(const [direct,restart] of [[true,false],[false,true],[true,true]]){
   }finally{
     // Terminate the entire child tree on Windows; killing its wrapper alone leaves Next running.
     if(process.platform==='win32'&&child.exitCode===null){
-      await new Promise(resolve=>{const kill=spawn('taskkill',['/pid',String(child.pid),'/t','/f'],{stdio:'ignore',windowsHide:true});kill.once('exit',resolve);kill.once('error',resolve);});
+      const treeStopped=await new Promise(resolve=>{
+        const kill=spawn('taskkill',['/pid',String(child.pid),'/t','/f'],{stdio:'ignore',windowsHide:true});
+        const timeout=setTimeout(()=>{kill.kill();resolve(false);},5000);
+        const finish=success=>{clearTimeout(timeout);resolve(success);};
+        kill.once('exit',code=>finish(code===0));
+        kill.once('error',()=>finish(false));
+      });
+      // A restricted Windows shell can deny taskkill even for our own child.
+      if(!treeStopped&&child.exitCode===null)child.kill('SIGTERM');
     }else child.kill('SIGTERM');
-    await stopped;
+    let stopTimer;
+    const didStop=await Promise.race([
+      stopped.then(()=>true),
+      new Promise(resolve=>{stopTimer=setTimeout(()=>resolve(false),10000);}),
+    ]);
+    clearTimeout(stopTimer);
+    assert(didStop,'Unable to stop the isolated startup process '+child.pid+'. Run this test with permission to terminate its child processes.');
   }
 }
 console.log('PASS Hostinger runtime package without scripts/source/env: first bootstrap, wrapper restart, packaged restart, traced SQL, port, MySQL health and unchanged administrator credentials.');

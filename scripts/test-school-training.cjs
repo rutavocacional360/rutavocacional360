@@ -31,6 +31,8 @@ assert.equal(schoolTrainingTargets.length,40);assert(schoolTrainingTargets.every
 for(const stage of educationStages.filter(s=>/EGB/.test(s)))assert.equal(defaultPreparationLevel({stage}),'bachillerato');
 assert.equal(defaultPreparationLevel({stage:'Me gradué del colegio'}),'universidad');assert.equal(schoolTarget(null),false);assert.equal(schoolTarget(1),false);
 assert.equal(preparationLevel([],'bachillerato'),'bachillerato');
+assert.equal(preparationLevel(['bachillerato:ciencias'],'universidad'),'universidad','Explicit administrator destination wins over inconsistent legacy options');
+assert.equal(preparationLevel(['university-career'],'bachillerato'),'bachillerato');
 assert.equal(preparationHref('bachillerato:contabilidad'),'/mi-ruta/cursos?carrera=bachillerato%3Acontabilidad');
 assert(trainingTargetMatches(['bachillerato:tecnico'],'bachillerato:contabilidad'),'A specialty can use the general preparation of its own modality');
 assert(trainingTargetMatches(['bachillerato:ciencias'],'bachillerato:ciencias-exactas'));

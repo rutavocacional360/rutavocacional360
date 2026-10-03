@@ -1,13 +1,14 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { db, document, put, fail } from "./store";
 import { assessmentImportLevel, scopeImportedTests } from "./assessment-import";
 const globalJobs = globalThis as unknown as {
   rutaJobs?: Map<string, ChildProcess>;
+  rutaPendingJobs?: Map<string, symbol>;
 };
 const jobs = globalJobs.rutaJobs || (globalJobs.rutaJobs = new Map());
-const pending = new Map<string, symbol>();
+const pending = globalJobs.rutaPendingJobs || (globalJobs.rutaPendingJobs = new Map());
 export const importFolder = () =>
   resolve(
     /*turbopackIgnore: true*/ process.env.IMPORT_PATH || "storage/imports",
@@ -41,6 +42,7 @@ export async function cancelJob(owner: string, id: string) {
     tests: undefined,
     text: undefined,
     warnings: undefined,
+    images: undefined,
   });
 }
 export async function assignJob(owner: string, id: string, requestedLevel: unknown) {
@@ -78,8 +80,16 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
     );
   const token = Symbol(id);
   pending.set(id, token);
+  const workerFile = resolve(/*turbopackIgnore: true*/ ".runtime/import-worker.cjs");
   let bytes: Buffer;
   try {
+    try {
+      await access(workerFile);
+    } catch {
+      const error = "El servicio de importación no está preparado. Compila y despliega de nuevo la aplicación para reintentar.";
+      await updateJob(owner, id, { status: "Error", error, errorCode: "IMPORT_WORKER_MISSING" }, () => pending.get(id) === token);
+      fail(error, 503);
+    }
     bytes = await readFile(resolve(importFolder(), id));
   } catch (error) {
     if (pending.get(id) === token) pending.delete(id);
@@ -92,20 +102,24 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
     educationLevel,
     progress: 10,
     error: "",
+    errorCode: undefined,
     tests: undefined,
     text: undefined,
     warnings: undefined,
+    images: undefined,
   }, () => pending.get(id) === token);
   } catch(error) {
     if (pending.get(id) === token) pending.delete(id);
     throw error;
   }
   if (pending.get(id) !== token) return;
-  const child = fork(
-    resolve(/*turbopackIgnore: true*/ ".runtime/import-worker.cjs"),
+  let child: ChildProcess;
+  try {
+    child = fork(
+    workerFile,
     [],
     {
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
       execArgv: ["--max-old-space-size=512"],
       env: {
         NODE_ENV: process.env.NODE_ENV || "production",
@@ -117,8 +131,25 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
       windowsHide: true,
     },
   );
+  } catch {
+    try {
+      await updateJob(owner, id, {
+        status: "Error", error: "No se pudo iniciar el proceso de extracción. Reintenta la importación.",
+      }, () => pending.get(id) === token);
+    } finally {
+      if (pending.get(id) === token) pending.delete(id);
+    }
+    fail("No se pudo iniciar el proceso de extracción. Reintenta la importación.", 503);
+  }
   jobs.set(id, child);
   pending.delete(id);
+  // Keep only a bounded diagnostic tail. Never expose document text or internal
+  // paths from stderr in API responses or application logs.
+  let diagnostic = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    diagnostic = (diagnostic + chunk).slice(-8192);
+  });
   const active = () => jobs.get(id) === child;
   const finish = async (patch: any) => {
     if (!active()) return;
@@ -145,6 +176,7 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
           status: "Error",
           error:
             "Se agotó el tiempo de extracción. Divide el documento o reintenta.",
+          errorCode: "IMPORT_TIMEOUT",
         });
         child.kill();
       }),
@@ -164,7 +196,7 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
           tests: scopeImportedTests(message.result.tests || [], educationLevel),
         });
       if (message.error)
-        await finish({ status: "Error", error: message.error });
+        await finish({ status: "Error", error: message.error, errorCode: message.code });
     }),
   );
   child.on("error", () =>
@@ -172,16 +204,39 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
       finish({
         status: "Error",
         error: "No se pudo iniciar el proceso de extracción.",
+        errorCode: "IMPORT_WORKER_START_FAILED",
       }),
     ),
   );
-  child.on("exit", () =>
-    enqueue(() =>
-      finish({
-        status: "Error",
-        error: "La extracción se interrumpió. Puedes reintentar.",
-      }),
-    ),
+  // `close` follows exit and drains the child's channels. A final result already
+  // queued above must win over a process exit, including for large documents.
+  child.on("close", (code, signal) =>
+    enqueue(async () => {
+      if (!active()) return;
+      let errorCode = "IMPORT_WORKER_INTERRUPTED";
+      let error = "El proceso de extracción se cerró antes de terminar. Reintenta con el mismo documento; si vuelve a ocurrir, divídelo en archivos más pequeños.";
+      if (/heap out of memory|allocation failed|ENOMEM/i.test(diagnostic)) {
+        errorCode = "IMPORT_WORKER_MEMORY_LIMIT";
+        error = "El documento superó la memoria disponible para la extracción. Divídelo en archivos más pequeños o reduce la resolución de las páginas escaneadas y vuelve a importarlo.";
+      } else if (/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|ERR_DLOPEN_FAILED|Cannot find native binding/i.test(diagnostic)) {
+        errorCode = "IMPORT_DEPENDENCY_MISSING";
+        error = "El servidor no tiene todos los componentes de importación. Actualiza el despliegue y reintenta.";
+      }
+      console.error("import-worker-closed", { id, code, signal, errorCode });
+      await finish({ status: "Error", error, errorCode });
+    }),
   );
-  child.send({ data: bytes.toString("base64"), name: record.name, educationLevel });
+  // Sending a 10 MB source can fail asynchronously if the worker exits during
+  // startup. Handle IPC errors so retries never remain stuck in Procesando.
+  const sendFailed = () => enqueue(async () => {
+    await finish({ status: "Error", error: "No se pudo enviar el documento al proceso de extracción. Reintenta la importación." });
+    child.kill();
+  });
+  try {
+    child.send({ data: bytes.toString("base64"), name: record.name, educationLevel }, error => {
+      if (error) sendFailed();
+    });
+  } catch {
+    sendFailed();
+  }
 }

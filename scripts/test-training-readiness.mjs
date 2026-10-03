@@ -34,6 +34,9 @@ try {
   await assert.rejects(saveTraining(admin,'simulator',{...blank,title:'Invalid draft',status:'draft',...patch}),/Separa|nivel debe coincidir/);
  }
  const course=await saveTraining(admin,'course',{id:'',version:0,revision:0,status:'published',title:'Curso Ciencias QA',description:'Preparación',objectives:'Practicar',level:'Inicial',type:'general',careerIds:['bachillerato:ciencias'],fields:[],institutions:[],studentIds:[],access:'all',activities:[{id:'activity',module:'QA',title:'Práctica',kind:'simulator',content:'',required:true,completion:'submit',simulatorId:simulator.id,simulatorVersion:simulator.version}]});
+ const universityCareer=api.trainingCatalog().careers.find(c=>!c.id.startsWith('bachillerato:')).id;
+ const universitySimulator=await saveTraining(admin,'simulator',{...api.schoolPracticeTemplate(blank,'ciencias'),educationLevel:'universidad',careerIds:[universityCareer],title:'Universidad separada QA'});
+ await assert.rejects(saveTraining(admin,'course',{...course,id:'',version:0,revision:0,title:'Curso con simulador ajeno',activities:[{...course.activities[0],simulatorId:universitySimulator.id,simulatorVersion:universitySimulator.version}]}),/misma categoría/);
  const locked=async()=>{
   const state=await trainingState(user);
   assert.equal(state.recommendations.length,0);assert.equal(state.simulators.length,0);assert.equal(state.courses.length,0);
@@ -55,6 +58,12 @@ try {
  const ready=await trainingState(user);assert(ready.readiness.bachillerato.ready);assert.equal(ready.educationLevel,'bachillerato');assert.equal(ready.readiness.universidad.ready,false);assert.equal(ready.readiness.universidad.total,0);assert(ready.recommendations.length>0);assert(ready.recommendations.every(r=>r.careerId.startsWith('bachillerato:')));assert(ready.careers.every(c=>c.id.startsWith('bachillerato:')));
  assert(ready.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length<40,'Only result-related school targets are offered');
  assert(ready.simulators.some(s=>s.id===simulator.id));
+ assert(ready.simulators.every(s=>s.educationLevel==='bachillerato'),'Student catalog carries the actual route explicitly');
+ // Inconsistent historical metadata must never override the administrator's destination.
+ const inconsistent={...universitySimulator,careerIds:['bachillerato:ciencias']};
+ await db.prepare('UPDATE training_entities SET content=? WHERE id=? AND version=?').run(JSON.stringify(inconsistent),inconsistent.id,inconsistent.version);
+ assert(!(await trainingState(user)).simulators.some(s=>s.id===inconsistent.id));
+ await assert.rejects(api.startDirectSimulator(user,inconsistent.id,'practice'),e=>e.status===409);
  // The exact specialty in a report must lead to published matching preparation.
  const specialty=ready.recommendations.find(r=>!['bachillerato:ciencias','bachillerato:tecnico'].includes(r.careerId));
  assert(specialty,'A complete differentiated school profile has a concrete preparation target');
@@ -73,9 +82,24 @@ try {
  const inheritedSimulator=await saveTraining(admin,'simulator',inheritedTemplate);
  const inheritedCourse=await saveTraining(admin,'course',{...course,id:'',version:0,revision:0,title:'Curso vinculado a la especialidad QA',careerIds:[specialty.careerId],activities:[{...course.activities[0],simulatorId:inheritedSimulator.id,simulatorVersion:inheritedSimulator.version}]});
  assert((await trainingState(user)).simulators.some(s=>s.id===inheritedSimulator.id));
- assert((await api.startDirectSimulator(user,inheritedSimulator.id,'practice')).id,'A simulator inheriting a school specialty uses school prerequisites');
+ const inheritedAttempt=await api.startDirectSimulator(user,inheritedSimulator.id,'practice');
+ assert(inheritedAttempt.id,'A simulator inheriting a school specialty uses school prerequisites');
+ assert.equal(inheritedAttempt.simulator.educationLevel,'bachillerato');assert.equal(inheritedAttempt.instrument.educationLevel,'bachillerato');
+ const inheritedSnapshot=await db.prepare('SELECT * FROM training_attempts WHERE id=?').get(inheritedAttempt.id);
+ const legacySnapshot=JSON.parse(inheritedSnapshot.snapshot);delete legacySnapshot.educationLevel;
+ const legacyView=await api.attemptView(user,{...inheritedSnapshot,snapshot:JSON.stringify(legacySnapshot)});
+ assert.equal(legacyView.simulator.educationLevel,'bachillerato','Legacy school attempts inherit their saved course route for history');
+ await db.prepare('UPDATE training_attempts SET snapshot=? WHERE id=?').run(JSON.stringify({...legacySnapshot,educationLevel:'universidad'}),inheritedAttempt.id);
+ await assert.rejects(api.startDirectSimulator(user,inheritedSimulator.id,'practice'),/intento pendiente.*otra ruta/);
+ await db.prepare('UPDATE training_attempts SET snapshot=? WHERE id=?').run(inheritedSnapshot.snapshot,inheritedAttempt.id);
  const started=await api.startDirectSimulator(user,simulator.id,'practice');assert(started.id);
  const enrollment=await api.enroll(user,course.id);assert(enrollment.id);
+ const courseAttempt=await api.startTraining(user,enrollment.id,'activity','practice');
+ assert.equal(courseAttempt.simulator.educationLevel,'bachillerato');
+ const courseAttemptSnapshot=(await db.prepare('SELECT snapshot FROM training_attempts WHERE id=?').get(courseAttempt.id)).snapshot;
+ await db.prepare('UPDATE training_attempts SET snapshot=? WHERE id=?').run(JSON.stringify({...JSON.parse(courseAttemptSnapshot),educationLevel:'universidad'}),courseAttempt.id);
+ await assert.rejects(api.startTraining(user,enrollment.id,'activity','practice'),/intento pendiente.*otra ruta/);
+ await db.prepare('UPDATE training_attempts SET snapshot=? WHERE id=?').run(courseAttemptSnapshot,courseAttempt.id);
  const schoolTest={...api.schoolOrientationTemplate(),id:'school-extra',version:'1',status:'Publicado',group:'Todos los estudiantes',due:''};
  await api.saveDocument(admin,'rv360:custom-tests',[schoolTest],0);
  const added=await trainingState(user);assert.equal(added.readiness.bachillerato.ready,false);assert.equal(added.readiness.universidad.ready,false);assert.equal(added.readiness.universidad.total,0);

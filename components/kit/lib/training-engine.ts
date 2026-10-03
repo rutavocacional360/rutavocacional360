@@ -1,5 +1,5 @@
 import type { Simulator, BankQuestion } from "./training-types";
-import {schoolTarget} from '../data/school-training';
+import {schoolTarget,preparationLevel} from '../data/school-training';
 import {
   calculateTest,
   instrumentProblems,
@@ -9,6 +9,7 @@ import {
 export function academicInstrument(s: Simulator, questions = s.questions) {
   return {
     ...s.instrument,
+    educationLevel: preparationLevel(s.careerIds, s.educationLevel),
     id: s.id,
     version: String(s.version),
     title: s.title,

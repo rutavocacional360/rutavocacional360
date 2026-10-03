@@ -1,19 +1,24 @@
 ﻿const assert=require('node:assert/strict'),fs=require('node:fs'),http=require('node:http'),path=require('node:path');
 const {build}=require('esbuild'),{jsPDF}=require('jspdf');
+const {version}=require('pdfjs-dist/package.json');
 let playwright;try{playwright=require('playwright')}catch{playwright=require('../.qa-tools/node_modules/playwright')}
 (async()=>{
  const doc=new jsPDF();for(let i=1;i<=3;i++){if(i>1)doc.addPage();doc.setFontSize(24);doc.text('Ruta Vocacional 360',20,25);doc.setFontSize(16);doc.text('Informe de simulador - pagina '+i,20,50);doc.setFillColor(82,61,185);doc.rect(20,65,170,30,'F');doc.text('Respuestas, puntuacion y explicaciones',20,115);}
  const pdf=Buffer.from(doc.output('arraybuffer'));
  const result=await build({stdin:{contents:`import {createRoot} from 'react-dom/client';import {useState,StrictMode} from 'react';import {PdfViewer} from './components/kit/components/ui/PdfViewer';function App(){const[src,setSrc]=useState('/report.pdf'),[show,setShow]=useState(true);return <><button onClick={()=>setSrc('/missing.pdf')}>Fallar</button><button onClick={async()=>setSrc(URL.createObjectURL(await (await fetch('/report.pdf')).blob()))}>Blob</button><button onClick={()=>setShow(v=>!v)}>Alternar</button>{show&&<PdfViewer src={src} title="Informe de simulador"/>}</>};createRoot(document.getElementById('root')).render(<StrictMode><App/></StrictMode>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outdir:'out',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
- let recover=false;const server=http.createServer((req,res)=>{const url=req.url;
- if(url==='/'){res.setHeader('Content-Type','text/html');res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/stdin.css"><style>body{margin:0;padding:12px;background:#0b1428;font-family:Arial}#root{max-width:900px;margin:auto}</style><div id="root"></div><script src="/stdin.js"></script>');}
+ const workerUrl=`/vendor/pdfjs-${version}.worker.js`,requests=[];
+ let recover=false;const server=http.createServer((req,res)=>{const url=req.url;requests.push(url);res.setHeader('X-Content-Type-Options','nosniff');
+ if(url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'nonce-pdf-viewer-qa' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob:; worker-src 'self' blob:; object-src 'none'");res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/stdin.css"><style>body{margin:0;padding:12px;background:#0b1428;font-family:Arial}#root{max-width:900px;margin:auto}</style><div id="root"></div><script nonce="pdf-viewer-qa" src="/stdin.js"></script>');}
  else if(url==='/report.pdf'||url==='/missing.pdf'&&recover){res.setHeader('Content-Type','application/pdf');res.end(pdf);}
- else if(url==='/vendor/pdf.worker.min.mjs'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync('public/vendor/pdf.worker.min.mjs'));}
+ // Match the production CDN: .mjs is served as text/plain and rejected by module workers.
+ else if(url==='/vendor/pdf.worker.min.mjs'){res.setHeader('Content-Type','text/plain');res.end(fs.readFileSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs'));}
+ else if(url===workerUrl){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(path.join('public',workerUrl)));}
  else{const file=result.outputFiles.find(f=>'/'+path.basename(f.path)===url);if(file){res.setHeader('Content-Type',url.endsWith('.css')?'text/css':'text/javascript');res.end(file.contents)}else{res.statusCode=404;res.end('Missing')}}});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await playwright.chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:process.platform==='win32'?{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'}:{})});
  try{const page=await browser.newPage({viewport:{width:360,height:800},deviceScaleFactor:2,isMobile:true,hasTouch:true}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:'+server.address().port);const viewport=page.locator('.pdf-viewer-viewport');const ready=()=>page.waitForFunction(()=>document.querySelector('.pdf-viewer-viewport')?.getAttribute('aria-busy')==='false');await ready();
+ await page.goto('http://127.0.0.1:'+server.address().port);const viewport=page.locator('.pdf-viewer-viewport');const ready=()=>page.waitForFunction(()=>{const error=document.querySelector('[role="alert"]');if(error)throw Error(error.textContent);const canvas=document.querySelector('canvas');return document.querySelector('.pdf-viewer-viewport')?.getAttribute('aria-busy')==='false'&&canvas?.width>0&&getComputedStyle(canvas).visibility==='visible'&&getComputedStyle(canvas).display!=='none';},null,{timeout:15000});await ready();
+ assert(requests.includes(workerUrl),'The viewer loads the JavaScript worker matching its PDF.js version');assert(!requests.includes('/vendor/pdf.worker.min.mjs'),'The viewer does not request the host-incompatible .mjs URL');
  assert.equal(await page.locator('iframe').count(),0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert(await page.locator('canvas').evaluate(c=>{const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let ink=0;for(let i=0;i<d.length;i+=4)if(d[i+3]&&d[i]<150)ink++;return ink>1000;}));
  await page.getByRole('button',{name:'Página siguiente del PDF'}).click();await ready();await page.getByText('Página 2 de 3',{exact:true}).waitFor();await page.getByText(/Informe de simulador - pagina 2/).waitFor({state:'attached'});
@@ -21,8 +26,8 @@ let playwright;try{playwright=require('playwright')}catch{playwright=require('..
  await page.getByLabel('Zoom del PDF').selectOption('1');await ready();assert(await viewport.evaluate(e=>e.scrollWidth<=e.clientWidth+1));
  for(const width of [320,360,390,768,1280]){await page.setViewportSize({width,height:800});await ready();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
  await page.setViewportSize({width:360,height:800});await ready();fs.mkdirSync('evidencia/cursos',{recursive:true});await page.screenshot({path:'evidencia/cursos/pdf-mobile-rendered.png',fullPage:true});
- await page.getByRole('button',{name:'Fallar',exact:true}).click();await page.getByRole('alert').waitFor();recover=true;await page.getByRole('button',{name:'Reintentar PDF'}).click();await ready();await page.getByText('Página 1 de 3',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Fallar',exact:true}).click();await page.getByRole('alert').waitFor();recover=true;await page.getByRole('button',{name:'Reintentar PDF'}).click();await page.getByRole('alert').waitFor({state:'hidden'});await ready();await page.getByText('Página 1 de 3',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Blob',exact:true}).click();await page.waitForTimeout(200);await ready();await page.getByRole('button',{name:'Alternar',exact:true}).click();await page.getByRole('button',{name:'Alternar',exact:true}).click();await ready();assert.deepEqual(errors,[]);
- console.log('PASS PDF canvas content, mobile 320/360/390, tablet/desktop, pagination, fit, zoom, HTTP error/retry, blob URL, remount, no JS errors');
+ console.log('PASS PDF production MIME regression, versioned worker, strict CSP/nosniff, canvas content, mobile 320/360/390, tablet/desktop, pagination, fit, zoom, HTTP error/retry, blob URL, remount, no JS errors');
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1});

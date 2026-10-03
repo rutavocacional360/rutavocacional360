@@ -102,6 +102,14 @@ async function published(u: User, kind: string, id: string, version: number) {
 }
 const unique = <T extends { id: string }>(items: T[]) =>
   items.filter((c, i) => items.findIndex((x) => x.id === c.id) === i);
+// Unassigned historical simulators may inherit their destination from a course.
+function knownTrainingLevel(value: any) {
+  if (value.educationLevel === 'bachillerato' || value.educationLevel === 'universidad')
+    return value.educationLevel as 'bachillerato' | 'universidad';
+  if (Array.isArray(value.careerIds) && value.careerIds.length)
+    return preparationLevel(value.careerIds);
+  return undefined;
+}
 export function trainingCatalog() {
   const offers = careerOffers(ecuadorCareers.map((c) => c.id));
   const careers = ecuadorCareers
@@ -331,6 +339,8 @@ async function validate(u: User, kind: string, e: any) {
         a.simulatorId!,
         a.simulatorVersion!,
       );
+      if (knownTrainingLevel(s) && knownTrainingLevel(s) !== preparationLevel(c.careerIds, e.educationLevel))
+        fail('El curso y sus simuladores deben pertenecer a la misma categoría: Bachillerato o Universidad.');
       if (
         !["submit", "score"].includes(a.completion) ||
         (a.completion === "score" &&
@@ -368,8 +378,9 @@ export async function saveTraining(u: User, kind: string, input: any) {
       if (current && current.revision === saved.revision && current.status === saved.status) return current;
       fail("Este contenido cambió después del guardado. Recarga antes de continuar.", 409);
     }
+    const family = input.id ? (await rows(u, kind)).filter(x => x.id === input.id) : [];
     const old = input.id
-      ? (await rows(u, kind)).find(
+      ? family.find(
           (x) => x.id === input.id && x.version === input.version,
         )
       : null;
@@ -399,6 +410,14 @@ export async function saveTraining(u: User, kind: string, input: any) {
       !(await rows(u, kind)).some((x) => x.id === input.id)
     )
       fail("Contenido no disponible.", 403);
+    if (kind === 'simulator') {
+      const familyLevel = family.map(knownTrainingLevel).find(Boolean);
+      const requestedLevel = knownTrainingLevel(e);
+      if (familyLevel && requestedLevel && familyLevel !== requestedLevel)
+        fail('La categoría del simulador es inmutable. Crea una copia independiente para la otra ruta educativa.', 409);
+      if (e.educationLevel === undefined && (familyLevel || requestedLevel))
+        e.educationLevel = familyLevel || requestedLevel;
+    }
     await validate(u, kind, e);
     if (kind === "simulator")
       e.questions = e.questions.map((q: any) => ({
@@ -585,12 +604,13 @@ export async function trainingState(u: User) {
     simulators: unique((await rows(u, "simulator")).filter((s) => s.status !== "draft"))
       .filter(
         (s: Simulator) =>
-          s.status === "published" && recs.some(r=>trainingTargetMatches(simulatorCareerIds(s,courses),r.careerId)),
+          s.status === "published" && preparationLevel(simulatorCareerIds(s,courses),s.educationLevel) === educationLevel && recs.some(r=>trainingTargetMatches(simulatorCareerIds(s,courses),r.careerId)),
       )
       .map((s: Simulator) => ({
         id: s.id,
         version: s.version,
         title: s.title,
+        educationLevel: preparationLevel(simulatorCareerIds(s, courses), s.educationLevel),
         careerIds: simulatorCareerIds(s, courses),
         instrument: { id: s.id, version: String(s.version), title: s.title,
           description: s.instrument.description, source: s.instrument.source,
@@ -752,6 +772,11 @@ async function resultFor(id: string) {
 }
 export async function attemptView(u: User, a: any) {
   const s = JSON.parse(a.snapshot) as Simulator;
+  if (!knownTrainingLevel(s)) {
+    const context = await enrollment(u, a.enrollment_id);
+    const course = JSON.parse(context.snapshot);
+    s.educationLevel = preparationLevel(course.careerIds, course.educationLevel);
+  }
   const safe = academicInstrument(s);
   safe.options = safe.options.map(({ points, contributions, ...o }) => o);
   safe.questions = safe.questions.map((q) => {
@@ -821,19 +846,27 @@ export async function startTraining(
       c = JSON.parse(e.snapshot) as Course,
       a = c.activities.find((a) => a.id === aid);
     if (!a || a.kind !== "simulator") fail("Actividad no disponible.");
-    await requireCompletedAssessments(u, preparationLevel(c.careerIds,(c as any).educationLevel));
+    const courseLevel = preparationLevel(c.careerIds, (c as any).educationLevel);
+    await requireCompletedAssessments(u, courseLevel);
     const existing = (await db
       .prepare(
         "SELECT * FROM training_attempts WHERE user_id=? AND enrollment_id=? AND activity_id=? AND mode=? AND state IN ('in_progress','recoverable')",
       )
       .get(u.id, eid, aid, mode)) as any;
-    if (existing) return await attemptView(u, existing);
+    if (existing) {
+      const active = await attemptView(u, existing);
+      if (active.simulator.educationLevel !== courseLevel)
+        fail('El intento pendiente pertenece a otra ruta educativa.', 409);
+      return active;
+    }
     const s = (await entity(
       u,
       "simulator",
       a.simulatorId!,
       a.simulatorVersion!,
     )) as Simulator;
+    if (knownTrainingLevel(s) && knownTrainingLevel(s) !== courseLevel)
+      fail('El simulador no pertenece a la ruta educativa de este curso.', 409);
     if (!s.modes.includes(mode as any)) fail("Modo no habilitado.");
     const count = (
       (await db
@@ -843,7 +876,7 @@ export async function startTraining(
         .get(u.id, eid, aid, mode)) as any
     ).n;
     if (count >= s.maxAttempts) fail("Alcanzaste el máximo de intentos.", 409);
-    return await createTrainingAttempt(u, eid, aid, mode, s);
+    return await createTrainingAttempt(u, eid, aid, mode, {...s, educationLevel: courseLevel});
   });
 }
 async function createTrainingAttempt(u: User, eid: string, aid: string, mode: string, s: Simulator) {
@@ -911,10 +944,15 @@ export async function startDirectSimulator(u: User, simulatorId: string, mode: s
       await db.prepare("INSERT INTO training_enrollments VALUES(?,?,?,?,?,?,?)").run(...Object.values(e));
     }
     const existing = await db.prepare("SELECT * FROM training_attempts WHERE user_id=? AND enrollment_id=? AND activity_id=? AND mode=? AND state IN ('in_progress','recoverable')").get(u.id, e.id, s.id, mode);
-    if (existing) return await attemptView(u, existing);
+    if (existing) {
+      const active = await attemptView(u, existing);
+      if (active.simulator.educationLevel !== currentLevel)
+        fail('El intento pendiente pertenece a otra ruta educativa.', 409);
+      return active;
+    }
     const count = await db.prepare("SELECT COUNT(*) n FROM training_attempts WHERE user_id=? AND enrollment_id=? AND activity_id=? AND mode=?").get(u.id, e.id, s.id, mode);
     if (count.n >= s.maxAttempts) fail("Alcanzaste el máximo de intentos.", 409);
-    return await createTrainingAttempt(u, e.id, s.id, mode, s);
+    return await createTrainingAttempt(u, e.id, s.id, mode, {...s, educationLevel: currentLevel});
   });
 }
 export async function saveTrainingAnswers(u: User, b: any) {

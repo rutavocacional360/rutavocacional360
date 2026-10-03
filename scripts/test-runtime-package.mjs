@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 // Reproduce a managed deployment: compiled output and traced assets, no source scripts.
 export async function createRuntimePackage() {
   const root = process.cwd();
+  const pdfjsVersion = JSON.parse(await readFile(resolve('node_modules/pdfjs-dist/package.json'), 'utf8')).version;
   const traced = new Set();
   async function scan(folder) {
     for (const entry of await readdir(folder, {withFileTypes:true})) {
@@ -18,13 +19,22 @@ export async function createRuntimePackage() {
     }
   }
   await scan(resolve('.next'));
+  const workerFiles = JSON.parse(await readFile(resolve('.runtime/import-worker.files.json'), 'utf8'));
+  for (const file of workerFiles) {
+    assert(traced.has(resolve(file)), 'Deployment trace must include import dependency '+file);
+  }
   const runtime = await mkdtemp(join(tmpdir(), 'rv360-runtime-'));
   await cp(resolve('.next'), join(runtime, '.next'), {
     recursive:true, filter: path => !['cache', 'dev', 'standalone'].includes(basename(path)),
   });
+  // Next serves public assets separately from server file traces. Include the
+  // complete public directory, as the deployment does, so browser QA can load
+  // login images, videos, icons and downloadable catalog resources as well.
+  await cp(resolve('public'), join(runtime, 'public'), {recursive:true});
   for (const file of ['database/mysql.sql', 'database/sqlite.sql',
     'lib/server/data/ecuador-offer.json', 'public/data/education-catalog.json',
-    'public/media/brain-book-icon.png', '.runtime/import-worker.cjs']) {
+    'public/media/brain-book-icon.png', `public/vendor/pdfjs-${pdfjsVersion}.worker.js`,
+    '.runtime/import-worker.cjs', '.runtime/import-worker.files.json']) {
     const source = resolve(file);
     assert(traced.has(source), 'Deployment trace must include '+file);
     await mkdir(dirname(join(runtime,file)), {recursive:true});

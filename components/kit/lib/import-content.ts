@@ -9,6 +9,11 @@ export function readDocumentMarkup(document:any){
  const tests:any[]=[];let title='',section='',description='',questions:any[]=[],current:any=null,scale:any[]=[];const lines:string[]=[];
  const add=(text:string,type='open',options:any[]=[])=>{const q:any={id:'q'+(questions.length+1),text:text.replace(/^\d{1,3}[.)]\s*/,''),type,options,section,source:'Documento · '+(section||title||'pregunta '+(questions.length+1))};const multiple=text.match(/(?:hasta|máximo)\s+(tres|dos|cuatro|cinco|\d+)\s+opciones/i);if(multiple){q.type='multiple';q.maxSelections=Number(multiple[1])||({tres:3,dos:2,cuatro:4,cinco:5} as any)[multiple[1].toLowerCase()];}questions.push(q);current=q;return q;};
  const finish=()=>{if(questions.length)tests.push({name:title||'Instrumento importado',description,items:questions});questions=[];current=null;description='';};
+ const paragraph=(text:string)=>{lines.push(text);if(/^secci[oó]n\s/i.test(text)){section=text;current=null;return;}if(/^(instrucciones|propósito|dirigido a|título de la investigación|nota para la aplicación)\s*:/i.test(text)){description+=(description?'\n':'')+text;current=null;return;}
+ const numbered=text.match(/^(?:pregunta\s*)?\d{1,3}[.)\-:]\s+(.+)/i);if(numbered){add(numbered[1]);return;}const option=text.match(/^(?:[a-h][.)\-:]|[○◯□☐])\s*(.+)/i);if(option&&current){current.options.push({value:current.options.length+1,label:option[1]});if(current.type==='open')current.type='single';return;}
+ const correct=text.match(/^(?:respuesta correcta|clave)\s*:\s*([a-h])/i);if(correct&&current){current.correctValues=[correct[1].toLowerCase().charCodeAt(0)-96];return;}
+ if(/^curso y paralelo\b/i.test(text)){add(text,'short');return;}
+ return;};
  const visit=(node:any)=>{if(node.nodeType!==1)return;const tag=node.tagName.toLowerCase(),text=clean(node);if(!text)return;
  if(/^h[1-3]$/.test(tag)){lines.push(text);if(/cuestionario|entrevista|^test\b|^instrumento\b/i.test(text)){finish();title=text;section='';}return;}
  if(tag==='table'){
@@ -19,14 +24,19 @@ export function readDocumentMarkup(document:any){
  }
  if(tag==='fieldset'){const legend=node.querySelector('legend');if(legend){const labels=Array.from(node.querySelectorAll('label')).map((l:any,i)=>({value:i+1,label:clean(l)}));const q=add(clean(legend),node.querySelector('input[type=checkbox]')?'multiple':'single',labels);if(!labels.length)q.type='open';lines.push(text);return;}}
  if(tag==='li'){const own=directText(node);if(own){lines.push(own);if(node.parentElement?.tagName.toLowerCase()==='ol')add(own);else if(current){current.options.push({value:current.options.length+1,label:own});if(current.type==='open')current.type='single';}}for(const child of node.children)if(['ol','ul'].includes(child.tagName.toLowerCase()))visit(child);return;}
- if(tag==='p'){lines.push(text);if(/^secci[oó]n\s/i.test(text)){section=text;current=null;return;}if(/^(instrucciones|propósito|dirigido a|título de la investigación|nota para la aplicación)\s*:/i.test(text)){description+=(description?'\n':'')+text;current=null;return;}
- const numbered=text.match(/^(?:pregunta\s*)?\d{1,3}[.)\-:]\s+(.+)/i);if(numbered){add(numbered[1]);return;}const option=text.match(/^(?:[a-h][.)\-:]|[○◯□☐])\s*(.+)/i);if(option&&current){current.options.push({value:current.options.length+1,label:option[1]});if(current.type==='open')current.type='single';return;}
- const correct=text.match(/^(?:respuesta correcta|clave)\s*:\s*([a-h])/i);if(correct&&current){current.correctValues=[correct[1].toLowerCase().charCodeAt(0)-96];return;}
- if(/^curso y paralelo\b/i.test(text)){add(text,'short');return;}
- return;}
- for(const child of node.children||[])visit(child);
+ if(tag==='p'||tag==='pre'||(['div','section','article','main','span'].includes(tag)&&!node.querySelector('p,div,section,article,fieldset,ol,ul,table,h1,h2,h3'))){
+  const copy=node.cloneNode(true);for(const br of copy.querySelectorAll('br'))br.replaceWith(document.createTextNode('\n'));
+  for(const line of String(copy.textContent||'').split(/\r?\n/)){const value=line.replace(/\s+/g,' ').trim();if(value)paragraph(value);}
+  return;
+ }
+ // Text and inline elements can sit directly inside body/div between block elements.
+ // Accumulate those runs so <br> remains a question/option boundary.
+ let inline='';const flushInline=()=>{for(const line of inline.split(/\r?\n/)){const value=line.replace(/\s+/g,' ').trim();if(value)paragraph(value);}inline='';};
+ const blocks='p,pre,div,section,article,main,fieldset,ol,ul,li,table,h1,h2,h3';
+ for(const child of node.childNodes||[]){if(child.nodeType===3){inline+=child.textContent||'';continue;}if(child.nodeType!==1)continue;const childTag=child.tagName.toLowerCase();if(childTag==='br'){inline+='\n';continue;}if(child.matches(blocks)||child.querySelector(blocks)){flushInline();visit(child);}else{const copy=child.cloneNode(true);for(const br of copy.querySelectorAll('br'))br.replaceWith(document.createTextNode('\n'));inline+=copy.textContent||'';}}
+ flushInline();
  };visit(document.body||document.documentElement);finish();
- return {text:lines.join('\n'),embedded:embedded.length?embedded:tests,warnings:tests.some(t=>/bachillerato|representante legal/i.test(t.description))?['El documento original se refiere a bachillerato. Revisa su población destinataria antes de publicarlo en una plataforma para adultos que buscan carrera universitaria.']:[]};
+ return {text:lines.length?lines.join('\n'):String((document.body||document.documentElement).textContent||''),embedded:embedded.length?embedded:tests,warnings:tests.some(t=>/bachillerato|representante legal/i.test(t.description))?['El documento menciona Bachillerato. Comprueba que corresponda al nivel elegido antes de publicarlo.']:[]};
 }
 export function proposeTests(text:string,embedded:any[],name:string){
  const base=(title:string)=>({schemaVersion:2,id:'test-'+globalThis.crypto.randomUUID(),version:'1',title,description:'Instrumento importado. Revisa su contenido antes de publicar.',source:name,status:'Borrador',group:'Todos los estudiantes',due:'',scoring:'manual',aggregation:'sum',resultRelease:'immediate',options:[],questions:[] as any[]});
@@ -41,7 +51,7 @@ export function proposeTests(text:string,embedded:any[],name:string){
   if(question){q={text:question[1],options:[],section};items.push(q);lastOption=null;}
   else if(option&&q){lastOption={label:option[1],value:q.options.length+1};q.options.push(lastOption);}
   else if(q&&/^(respuesta correcta|clave)\s*:/i.test(line)){const match=line.match(/:\s*([a-z])/i);if(match)q.correctValues=[match[1].toLowerCase().charCodeAt(0)-96];lastOption=null;}
-  else if(!/^(?:página\s*)?\d+\s*(?:de\s*\d+)?$/i.test(line)){
+  else if(!/^(?:\[página\s+\d+\]|(?:página\s*)?\d+\s*(?:de\s*\d+)?)$/i.test(line)){
    if(lastOption)lastOption.label+=' '+line;
    else if(q&&!q.correctValues)q.text+=' '+line;
    else if(!q)intro.push(line);

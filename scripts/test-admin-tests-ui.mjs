@@ -68,8 +68,18 @@ try{
   const published=globalThis.__adminCustomSnapshots.at(-1);assert.equal(published.find(item=>item.id===(level==='bachillerato'?'Publicado escolar QA':'Publicado universitario QA')).status,'Archivado');assert.equal(published.find(item=>item.id===(level==='bachillerato'?'Publicado universitario QA':'Publicado escolar QA')).status,'Publicado','Publishing cannot archive another category');
   click('Archivar');await waitFor(()=>globalThis.__adminSavedValues.length>0);
   assert.deepEqual(Object.keys(globalThis.__adminSavedValues.at(-1).value),[level+':intereses'],'Original state belongs only to the active category');
-  click('Importar documento');globalThis.__adminFileInput.onChange({target:{files:[new File(['<h1>QA</h1>'],'qa.html',{type:'text/html'})]}});await waitFor(()=>globalThis.__adminNetwork.length>=2);
+  click('Importar documento');
+  for(const extension of ['.pdf','.docx','.html','.htm','.txt','.md','.rtf','.odt'])assert(globalThis.__adminFileInput.accept.split(',').includes(extension));
+  for(const rejected of [new File(['Word antiguo'],'legacy.doc'),new File([],'empty.html')]){
+   const event={target:{files:[rejected],value:'selected-file'}};
+   const before=globalThis.__adminNetwork.length;globalThis.__adminFileInput.onChange(event);
+   assert.equal(globalThis.__adminNetwork.length,before,'Invalid documents must be rejected before upload');
+   assert.equal(event.target.value,'','The file input must allow selecting the same document again');
+  }
+  globalThis.__adminFileInput.onChange({target:{files:[new File(['<h1>QA</h1>'],'qa.html',{type:'text/html'})]}});await waitFor(()=>globalThis.__adminNetwork.length>=2);
   const uploaded=globalThis.__adminNetwork.find(call=>call.options.body instanceof FormData);assert.equal(uploaded.options.body.get('educationLevel'),level);await waitFor(()=>globalThis.__adminProposals.some(proposals=>proposals.length));assert(globalThis.__adminProposals.at(-1).every(test=>test.educationLevel===level),'Document metadata cannot change the selected category');
+  globalThis.__adminFileInput.onChange({target:{files:[new File(['No compatible'],'unsupported.doc')],value:'selected-file'}});
+  assert.deepEqual(globalThis.__adminProposals.at(-1),[],'An invalid replacement file must clear prior extraction results');
   globalThis.__adminNetwork=[];click('Reintentar');await waitFor(()=>globalThis.__adminNetwork.length>=2);const retry=JSON.parse(globalThis.__adminNetwork[0].options.body);assert.equal(retry.action,'retry');assert.equal(retry.educationLevel,level);
   globalThis.__adminNetwork=[];click('Asignar a '+(level==='bachillerato'?'Bachillerato':'Universidad'));await waitFor(()=>globalThis.__adminNetwork.length>=2);const assign=JSON.parse(globalThis.__adminNetwork[0].options.body);assert.equal(assign.action,'assign');assert.equal(assign.educationLevel,level);
   const audience=renderToStaticMarkup(React.createElement(AudienceSettings,{test:instrument('audience',level,'Borrador',{audience:'selected',studentIds:[]}),users:globalThis.__adminUsers,onChange(){}}));assert(audience.includes('Categoría: '+(level==='bachillerato'?'Bachillerato':'Universidad')));assert(!audience.includes('Bachillerato y Universidad')&&!audience.includes('value="ambos"'));assert(audience.includes(level==='bachillerato'?'Estudiante EGB QA':'Estudiante graduado QA'));assert(!audience.includes(level==='bachillerato'?'Estudiante graduado QA':'Estudiante EGB QA'));

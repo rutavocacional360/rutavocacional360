@@ -7,8 +7,10 @@ import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { assertTestDatabase } from './test-database-target.mjs';
+import { createRuntimePackage } from './test-runtime-package.mjs';
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','guidance-'));
 process.env.DB_DRIVER=process.env.GUIDANCE_DB_DRIVER||'sqlite';
@@ -89,31 +91,43 @@ try{
  writeFileSync(resolve(folder,'report.json'),JSON.stringify(second));
  console.log('PASS server: separate school/university routes, graduation requires new university assessments, persisted profile, digest updates after review, authorized history and withheld results.');
  console.log('PDF fixture: '+pdfPath);
- if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')){
+ if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')){
   await db.prepare('DELETE FROM assessment_results WHERE submission_id=?').run('pending_test');
   await db.prepare('DELETE FROM submissions WHERE id=?').run('pending_test');
   const password=randomBytes(24).toString('base64url');
   await db.prepare('UPDATE users SET password=? WHERE id=?').run(passwordHash(password),user.id);
   await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run('admin_test','Admin de prueba','admin@example.test',passwordHash(password),'admin',user.institutionId,'','Activo');
-  const base='http://127.0.0.1:3026';
+  const listener=createServer();
+  await new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',resolve);});
+  const port=listener.address().port;
+  await new Promise(resolve=>listener.close(resolve));
+  const base='http://127.0.0.1:'+port;
+  // Serve a fixed compiled package: another build must not replace browser
+  // chunks while the end-to-end import/retry workflow is running.
+  const runtime=await createRuntimePackage();
   const privateDir=mkdtempSync(resolve(tmpdir(),'rv360-http-'));
-  const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p','3026'],{env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
+  const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p',String(port)],{cwd:runtime,env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
     IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),
     ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:db.driver==='mysql'?'isolated-ci-not-a-provider-key':'',
     SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM:'',SMTP_SECURE:'',
     API_ORIGIN:'',VERCEL:'',NEXT_PUBLIC_DESIGN_PREVIEW:''},stdio:'pipe',windowsHide:true});
   const stopped=new Promise(resolve=>{child.once('exit',resolve);child.once('error',resolve);});
   let startupError=false;child.on('error',()=>{startupError=true;});
-  // Consume output without logging application payloads or credentials.
-  child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
+  // Keep startup diagnostics bounded and redact inherited credentials on failure.
+  let startupOutput='';
+  const capture=chunk=>{startupOutput=(startupOutput+chunk.toString()).slice(-8000);};
+  child.stdout.on('data',capture);child.stderr.on('data',capture);
+  const diagnostic=()=>Object.entries({...process.env,password}).reduce((log,[key,value])=>
+   /PASSWORD|SECRET|TOKEN|KEY/i.test(key)&&value ? log.split(value).join('[redacted]') : log,startupOutput);
   try{
    let ready=false;
-   for(let n=0;n<120;n++){
-    if(startupError||child.exitCode!==null)throw Error('The isolated HTTP server could not start.');
-    try{const r=await fetch(base+'/api/health');if(r.ok){ready=true;break;}}catch{}
+   const startupDeadline=Date.now()+90000;
+   while(Date.now()<startupDeadline){
+    if(startupError||child.exitCode!==null)throw Error('The isolated HTTP server could not start.\n'+diagnostic());
+    try{const r=await fetch(base+'/api/health',{signal:AbortSignal.timeout(1500)});if(r.ok){ready=true;break;}}catch{}
     await new Promise(r=>setTimeout(r,250));
    }
-   assert(ready,'Server startup');
+   assert(ready,'Server startup\n'+diagnostic());
    const request=(path,body,cookie='',method=body?'POST':'GET')=>fetch(base+'/api/'+path,{method,headers:{'Content-Type':'application/json',Origin:base,...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
    const login=await request('auth/login',{email:'test@example.test',password});assert.equal(login.status,200);
    const cookie=login.headers.get('set-cookie').split(';')[0];
@@ -162,7 +176,9 @@ try{
    await runValidationHttp({request,cookie,adminCookie,password,db});
    console.log('PASS HTTP: student/admin login, persisted profile, invalid values rejected, current report ordering and authorized admin regeneration.');
    const {runAssessmentImportHttp}=await import('./test-assessment-import-http.mjs');
-   await runAssessmentImportHttp({base,adminCookie,studentCookie:cookie});
+   // Format scenarios and the later visual suite have separate upload windows.
+   // This fixture-only reset never changes the application's throttle policy.
+   await runAssessmentImportHttp({base,adminCookie,studentCookie:cookie,resetImportThrottle:()=>db.prepare('DELETE FROM attempts WHERE key=?').run('import:admin_test')});
    const {runSchoolTrainingHttp}=await import('./test-school-training-http.mjs');
    await runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate,db});
    if(process.argv.includes('--visual')){
@@ -172,6 +188,10 @@ try{
    if(process.argv.includes('--admin-visual')){
     const {runAdminImportVisual}=await import('./test-admin-import-visual.mjs');
     await runAdminImportVisual({base,password,folder});
+   }
+   if(process.argv.includes('--users-visual')){
+    const {runAdminUsersVisual}=await import('./test-admin-users-visual.mjs');
+    await runAdminUsersVisual({base,password,folder});
    }
   }finally{child.kill();await stopped;}
  }

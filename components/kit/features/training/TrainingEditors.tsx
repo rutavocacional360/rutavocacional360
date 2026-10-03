@@ -2,6 +2,7 @@
 import {instrumentProblems} from '../../lib/test-engine';
 import {autofillSimulator} from '../../lib/simulator-autofill';
 import {importSimulatorDocument} from '../../lib/import-simulator';
+import {DOCUMENT_ACCEPT,DOCUMENT_FORMAT_LABEL,DOCUMENT_FORMAT_HELP,documentFileError} from '../../lib/document-formats';
 import {PresentationEditor} from '../../components/domain/PresentationEditor';
 import {suggestSimulatorCareers} from "../../lib/simulator-careers";
 import { AcademicQuestionSettings } from "./AcademicQuestionSettings";
@@ -548,6 +549,9 @@ export function SimulatorEditor({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [html, setHtml] = useState(""),
+    [importFile, setImportFile] = useState<File | null>(null),
+    [importError, setImportError] = useState(""),
+    [importProgress, setImportProgress] = useState(""),
     [result, setResult] = useState<any>(null),
     [preview, setPreview] = useState<Simulator | null>(null),
     [answers, setAnswers] = useState<any>({});
@@ -578,18 +582,26 @@ export function SimulatorEditor({
    try{const result=await autofillSimulator(s,d.careers,false,message=>{if(mounted.current)setAiProgress(message);});if(!mounted.current)return;change(result.simulator);setError(result.message);setStep(4);}finally{if(mounted.current){setBusy(false);setAiProgress('');}}
   }
   async function upload(file: File) {
+    if (busy || saving) return;
+    const fileError = documentFileError(file.name, file.size);
+    setImportFile(fileError ? null : file);
+    setImportError(fileError || "");
+    if (fileError) return;
     setBusy(true);
     setError("");
+    setImportProgress("Preparando el documento…");
     try {
-      const result=await importSimulatorDocument(file,s,d.careers);
+      const result=await importSimulatorDocument(file,s,d.careers,message=>{if(mounted.current)setImportProgress(message);});
       if(!mounted.current)return;
       change(result.simulator);
       setError(result.message);
+      setImportFile(null);
+      setHtml("");
       setStep(0);
     } catch (e) {
-      if(mounted.current)setError((e as Error).message);
+      if(mounted.current)setImportError((e as Error).message);
     } finally {
-      if(mounted.current)setBusy(false);
+      if(mounted.current){setBusy(false);setImportProgress("");}
     }
   }
   return (
@@ -656,14 +668,15 @@ export function SimulatorEditor({
             <ProfileSelect data={d} value={s} onChange={patch} />
           )}
           <label>
-            Importar Word, PDF o HTML
+            Añadir preguntas desde un documento
             <input
               type="file"
-              accept=".docx,.pdf,.html,.htm"
-              disabled={busy}
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+              accept={DOCUMENT_ACCEPT}
+              disabled={busy || saving}
+              onChange={(e) => {const file=e.target.files?.[0];e.target.value="";if(file)void upload(file);}}
             />
           </label>
+          <p className="small muted">{DOCUMENT_FORMAT_LABEL}. {DOCUMENT_FORMAT_HELP} Máximo 60 páginas por PDF.</p>
           <TextareaField
             label="O pegar código HTML"
             value={html}
@@ -679,10 +692,13 @@ export function SimulatorEditor({
             {busy ? "Extrayendo…" : "Extraer HTML"}
           </Button>
           <Notice>
+            Las preguntas se añadirán a este simulador de {d.educationLevel==='bachillerato'?'Bachillerato':'Universidad'}.
             La importación crea preguntas sin revisar. Configura claves automáticas,
             explicaciones y procedencia antes de publicar; no se ejecuta el
             código del documento.
           </Notice>
+          {importProgress&&<p role="status">{importProgress}</p>}
+          {importError&&<Notice tone="danger"><p>{importError}</p>{importFile&&<><p className="small" style={{overflowWrap:'anywhere'}}>{importFile.name}</p><Button variant="secondary" disabled={busy||saving} onClick={()=>void upload(importFile)}>Reintentar extracción</Button></>}</Notice>}
         </>
       )}
       {step === 1 && (

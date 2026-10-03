@@ -10,7 +10,8 @@ export function trainingTargetMatches(resourceIds:readonly string[]|undefined,ca
   technicalOptions.some(o=>'bachillerato:'+o.id===careerId)?'bachillerato:tecnico':undefined;
  return !!parent&&!!resourceIds?.includes(parent);
 }
-export const preparationLevel=(ids:string[]=[],explicit?:string)=>ids.length?(ids.some(schoolTarget)?'bachillerato':'universidad'):explicit==='bachillerato'?'bachillerato':'universidad';
+// Keep the administrator's destination stable even when reviewing inconsistent legacy links.
+export const preparationLevel=(ids:string[]=[],explicit?:string):EducationLevel=>explicit==='bachillerato'||explicit==='universidad'?explicit:ids.some(schoolTarget)?'bachillerato':'universidad';
 export const schoolTrainingTargets=[
  {id:'bachillerato:ciencias',name:'Bachillerato en Ciencias',area:'Ciencias · formación general',description:'Compara asignaturas y actividades del tronco común.',educationLevel:'bachillerato',offers:[]},
  {id:'bachillerato:tecnico',name:'Bachillerato Técnico',area:'Técnico · formación general',description:'Explora proyectos, talleres y figuras profesionales.',educationLevel:'bachillerato',offers:[]},

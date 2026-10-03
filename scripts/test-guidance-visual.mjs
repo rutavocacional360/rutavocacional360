@@ -44,7 +44,7 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   await registrationContext.close();
   const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();
   page.on('pageerror',error=>failures.push({name:'JavaScript',message:error.message}));
-  page.on('console',message=>{if(message.type()==='error')failures.push({name:'Browser console',message:message.text()});});
+  page.on('console',message=>{if(message.type()==='error')failures.push({name:'Browser console',message:message.text(),location:message.location(),page:page.url()});});
   await login(page);
   await page.goto(base+'/mi-ruta/perfil');
   await choose(page,'Etapa educativa','Estoy eligiendo mi bachillerato');

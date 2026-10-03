@@ -45,6 +45,28 @@ pestaña; las versiones y los estados de los tests originales se gestionan por
 ruta. Un documento puede importarse en cada categoría por separado. La
 importación mantiene esa categoría al reintentar y al guardar los borradores.
 
+En Evaluaciones y Simuladores, «Importar documento» admite PDF, Word `.docx`,
+HTML `.html`/`.htm` (archivo o código pegado), TXT, Markdown `.md`, RTF y
+OpenDocument `.odt`. El límite es 10 MB, 60 páginas por PDF y 500 preguntas por
+instrumento. Los documentos Word antiguos `.doc` deben guardarse como `.docx`,
+ODT o PDF; cambiarles solamente la extensión no los convierte.
+La compatibilidad de Word sigue la documentación de [Mammoth](https://github.com/mwilliamson/mammoth.js);
+ODT se lee según los párrafos, listas y tablas de [OpenDocument](https://docs.oasis-open.org/office/OpenDocument/v1.3/os/part3-schema/OpenDocument-v1.3-os-part3-schema.html).
+
+Selecciona primero Bachillerato o Universidad y comprueba el destino del diálogo.
+Para documentos de texto, usa preguntas numeradas (`1. ...`), opciones (`a) ...`,
+`b) ...`) y, cuando corresponda, `Clave: a`. Se reconocen también listas,
+tablas de escalas, campos HTML y datos estáticos de preguntas. No se ejecutan
+scripts del documento. La extracción crea contenido para revisar: completa
+claves, imágenes, puntuación y opciones de estudio antes de publicar.
+Los RTF y ODT importan texto; sus imágenes y fórmulas requieren revisión manual.
+Los PDF escaneados usan OCR y necesitan acceso a los
+[idiomas de Tesseract](https://github.com/naptha/tesseract.js/blob/master/docs/local-installation.md)
+en su primera lectura; un PDF con texto seleccionable evita esa dependencia.
+Si falla la extracción, «Reintentar extracción» conserva el archivo y la categoría.
+Una versión de simulador conserva el nivel de su familia y solo puede vincularse
+a cursos de ese nivel; para otro destino crea una copia independiente.
+
 Los tests personalizados anteriores sin categoría única conservan sus resultados
 en el historial. En Evaluaciones, abre «Tests anteriores sin categoría única» y
 crea una copia para Bachillerato o Universidad antes de volver a asignarlos. Las
@@ -124,6 +146,19 @@ cuando el alojamiento inicia Next.js directamente sin pasar por `npm start`.
 La preparación y la creación del administrador se incluyen en el código compilado;
 el arranque no necesita ejecutar archivos de `scripts/`. Los esquemas SQL se incluyen
 explícitamente en las trazas de despliegue de Next.js.
+`build-workers.mjs` genera el ejecutable de importación y su manifiesto de
+dependencias; las trazas de `/api/admin/import` incluyen ambos y los recursos
+de Word, PDF y OCR. Desplegar solo el ejecutable sin sus dependencias interrumpe
+la extracción. `node scripts/test-import-runtime.mjs` comprueba un paquete
+aislado con HTML, DOCX y PDF, sin acceder al `node_modules` del proyecto.
+Los cierres inesperados se registran como `import-worker-closed` con el código
+de salida y la señal, sin incluir el texto del documento ni rutas internas.
+El importador conserva el archivo para reintentar y distingue dependencias
+faltantes de memoria insuficiente. `node scripts/test-import-worker-exit.mjs`
+comprueba estos fallos y que un resultado completo no se pierda al cerrar el proceso.
+La prueba opcional `node scripts/test-document-ocr-live.mjs` importa un PDF
+compuesto solo por una imagen y descarga modelos públicos de español e inglés
+en un directorio temporal de pruebas; no forma parte de `npm test`.
 Usa las variables `ADMIN_*` e `INSTITUTION_*`. Retira `ADMIN_PASSWORD`
 tras la primera instalación. Reiniciar nunca limpia ni reemplaza datos existentes.
 
@@ -144,6 +179,11 @@ El primer arranque y el reinicio directo se prueban desde un paquete temporal si
 y las dependencias instaladas.
 El workflow `.github/workflows/verify.yml` prepara estas comprobaciones en Linux
 con Node.js 24, instalación sin dependencias de desarrollo y MySQL 8.
+`npm run test:users:visual` recorre el ciclo de cuentas, revocación de sesiones,
+exportaciones, indicadores y doce pantallas de administración y estudiantes en
+escritorio y móvil. Usa cuentas y almacenamiento temporales. Los recorridos
+`test:guidance:visual` y `test:admin:visual` cubren resultados, PDF, prácticas e
+importación, revisión y publicación de tests y simuladores en ambas rutas.
 
 Si hPanel indica `Completed` pero el dominio responde HTTP 500, consulta
 **Runtime logs**. Ese estado confirma la compilación, no la disponibilidad del

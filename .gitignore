@@ -39,6 +39,7 @@ references/
 .design-preview/
 
 /public/vendor/pdf.worker.min.mjs
+/public/vendor/pdfjs-*.worker.js
 .vercel
 
 .runtime/

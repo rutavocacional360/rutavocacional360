@@ -46,6 +46,8 @@ try {
   const template={...schoolPracticeTemplate(blank,'ciencias'),educationLevel:level,title:'CRUD '+level};
   if(level==='universidad')template.careerIds=[trainingCatalog().careers.find(c=>c.educationLevel==='universidad'||!c.id.startsWith('bachillerato:')).id];
   const created=await saveTraining(admin,'simulator',template);
+  const oppositeLevel=level==='bachillerato'?'universidad':'bachillerato';
+  await assert.rejects(saveTraining(admin,'simulator',{...created,educationLevel:oppositeLevel,careerIds:[]}),/categoría.*inmutable/,'Editing a draft cannot move it to the other route');
   assert.equal((await saveTraining(admin,'simulator',template)).id,created.id,'Retry does not duplicate creation');
   assert(!(await trainingState(student)).simulators.some(s=>s.id===created.id));
   await assert.rejects(saveTraining(student,'simulator',template),e=>e.status===403);
@@ -70,6 +72,8 @@ try {
   await conflict(()=>action('restore',ref(published)));
   const restored=await action('restore',ref(archived));
   assert.equal(restored.status,'published');
+  await assert.rejects(saveTraining(admin,'simulator',{...restored,version:0,revision:0,status:'published',educationLevel:oppositeLevel,careerIds:[]}),/categoría.*inmutable/,'A new version cannot archive a publication in the other route');
+  assert.equal((await trainingState(admin)).simulators.find(s=>s.id===restored.id&&s.version===restored.version).status,'published');
   const secondDraft=await saveTraining(admin,'simulator',{...restored,version:0,revision:0,status:'draft',title:'Segunda versión '+level});
   assert.equal(secondDraft.version,2);
   const second=await saveTraining(admin,'simulator',{...secondDraft,status:'published'});
@@ -121,6 +125,12 @@ try {
   if(submitted)assert.deepEqual(await db.prepare('SELECT * FROM submissions WHERE id=?').get(submitted.id),submitted);
   console.log('PASS tests '+level+': create, edit, publish, archive, restore, version, soft delete, draft delete, conflicts and history');
  }
+ const inferred=await saveTraining(admin,'simulator',{...schoolPracticeTemplate(blank,'ciencias'),educationLevel:undefined,title:'Ruta inferida desde opciones'});
+ assert.equal(inferred.educationLevel,'bachillerato');
+ const withoutTargets=await saveTraining(admin,'simulator',{...inferred,careerIds:[],educationLevel:undefined,title:'Borrador sin opciones'});
+ assert.equal(withoutTargets.educationLevel,'bachillerato','Removing options or omitting the category never moves a saved school draft to University');
+ const independentCopy=await saveTraining(admin,'simulator',{...withoutTargets,id:'',version:0,revision:0,educationLevel:'universidad',title:'Copia independiente Universidad'});
+ assert.notEqual(independentCopy.id,withoutTargets.id);assert.equal(independentCopy.educationLevel,'universidad');
  await assert.rejects(saveTraining(admin,'simulator',{...blank,educationLevel:'invalid'}));
  await assert.rejects(write([...(await tests()),{...schoolOrientationTemplate(),id:'invalid',version:'1',status:'Borrador',educationLevel:'invalid'}]));
  const original=(await api.availableOriginals(student))[0];

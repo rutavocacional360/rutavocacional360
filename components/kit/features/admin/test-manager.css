@@ -17,6 +17,8 @@
   gap: .65rem;
 }
 .assessment-manager .test-builder-header { flex-wrap: wrap; }
+.assessment-manager .import-drop strong { max-width: 100%; overflow-wrap: anywhere; }
+.assessment-manager .import-drop:focus-within { outline: 3px solid var(--primary); outline-offset: 3px; }
 @media (max-width: 640px) {
   .assessment-manager > .ar-tabs > button { flex: 1; }
   .assessment-manager .test-manager-header-actions { width: 100%; }

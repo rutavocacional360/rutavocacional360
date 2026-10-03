@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/store";
 import { startJob, cancelJob, assignJob, importFolder } from "@/lib/server/import-jobs";
 import { assessmentImportLevel } from "@/lib/server/assessment-import";
+import { documentFileError } from "@/components/kit/lib/document-formats";
 export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
@@ -37,10 +38,9 @@ export async function POST(req: NextRequest) {
       file = form.get("file");
     const educationLevel = assessmentImportLevel(form.get("educationLevel"));
     const reuse = form.get("reuse") === "1";
-    if (!(file instanceof File) || file.size > 10000000 || file.size < 5)
-      fail("Selecciona un archivo de hasta 10 MB.");
-    if (!/\.(pdf|docx|html?|htm)$/i.test(file.name))
-      fail("Selecciona PDF, Word (.docx) o HTML. Convierte .doc a .docx.");
+    if (!(file instanceof File)) fail("Selecciona un documento para importar.");
+    const fileError = documentFileError(file.name, file.size);
+    if (fileError) fail(fileError);
     const bytes = Buffer.from(await file.arrayBuffer()),
       digest = hash(bytes.toString("base64"));
     const previous = await document(owner, "rv360:imports", []);

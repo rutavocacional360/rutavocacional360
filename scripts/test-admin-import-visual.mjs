@@ -37,6 +37,84 @@ export async function runAdminImportVisual({base,password,folder}) {
   await page.setViewportSize({width:390,height:844});await evidence('admin-import-'+path+'-'+level+'-mobile');
   await page.setViewportSize({width:1440,height:1000});
  }
+ async function uploadWithRecovery(dialog,kind,html){
+  const input=dialog.locator('input[type="file"]');
+  const accepted=(await input.getAttribute('accept')).split(',');
+  for(const extension of ['.pdf','.docx','.html','.htm','.txt','.md','.rtf','.odt'])assert(accepted.includes(extension),kind+': missing '+extension);
+  let posts=0;
+  const unavailable=async route=>{posts++;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Interrupción temporal de prueba. Reintenta la extracción.'})});};
+  await page.route('**/api/admin/import',unavailable);
+  await input.setInputFiles({name:'documento-antiguo.doc',mimeType:'application/msword',buffer:Buffer.from('Documento antiguo')});
+  await dialog.getByRole('alert').filter({hasText:'Word antiguo (.doc) no es compatible.'}).waitFor();
+  assert.equal(posts,0,'Unsupported files must be rejected before upload');
+  const filename=kind+'-universidad.html';
+  await input.setInputFiles({name:filename,mimeType:'text/html',buffer:Buffer.from(html)});
+  await dialog.getByRole('alert').filter({hasText:'Interrupción temporal de prueba.'}).waitFor();
+  assert.equal(posts,1,'The initial extraction should fail exactly once');
+  await dialog.getByText(filename,{exact:true}).waitFor();
+  assert.equal(await input.inputValue(),'','Selecting the same document again must trigger an upload');
+  await page.setViewportSize({width:390,height:844});
+  const retry=dialog.getByRole('button',{name:'Reintentar extracción',exact:true});
+  const retryBounds=await retry.boundingBox(),headerBounds=await dialog.locator('.section-title').boundingBox();
+  assert(retryBounds&&headerBounds&&retryBounds.y>=headerBounds.y+headerBounds.height&&retryBounds.y+retryBounds.height<=844,'The retry action must be visible in the mobile viewport without scrolling');
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)<=2,'The retry dialog must not overflow horizontally');
+  await page.screenshot({path:resolve(folder,'admin-import-'+kind+'-retry-mobile.png'),fullPage:false});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.unroute('**/api/admin/import',unavailable);
+  if(kind==='simulador'){
+   // Reproduce the production failure after upload succeeds: the worker exits
+   // and the status endpoint reports Error. Retrying must keep the same source.
+   const jobId='qa-interrupted-simulator',interrupted='La extracción se interrumpió. Puedes reintentar.';
+   const statusUrl='**/api/admin/import?id='+jobId+'&status=1';
+   let acceptedPosts=0,failedPolls=0;
+   const assertRetainedSource=async request=>{
+    const form=await new Response(request.postDataBuffer(),{headers:{'Content-Type':request.headers()['content-type']}}).formData();
+    const source=form.get('file');
+    assert.equal(source?.name,filename,'Retry must retain the selected filename');
+    assert.equal(await source.text(),html,'Retry must retain the complete selected document');
+    assert.equal(form.get('educationLevel'),'universidad','Retry must retain the destination category');
+    assert.equal(form.get('reuse'),'1','Retry must resume the existing extraction');
+   };
+   const accepted=async route=>{
+    acceptedPosts++;await assertRetainedSource(route.request());
+    await route.fulfill({status:202,contentType:'application/json',body:JSON.stringify({id:jobId,status:'Procesando',educationLevel:'universidad'})});
+   };
+   const failed=async route=>{
+    failedPolls++;
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:jobId,status:'Error',error:interrupted,educationLevel:'universidad'})});
+   };
+   await page.route('**/api/admin/import',accepted);
+   await page.route(statusUrl,failed);
+   await retry.click();
+   await dialog.getByRole('alert').filter({hasText:interrupted}).waitFor();
+   assert.equal(acceptedPosts,1,'The retained file must be uploaded once after the initial 503');
+   assert.equal(failedPolls,1,'A terminal worker error must stop polling immediately');
+   await dialog.getByText(filename,{exact:true}).waitFor();
+   assert.equal(await input.inputValue(),'','Worker failure must remain recoverable without reselecting the file');
+   await page.setViewportSize({width:390,height:844});
+   const bounds=await retry.boundingBox();
+   assert(bounds&&bounds.y>=0&&bounds.y+bounds.height<=844,'Worker failure retry must be visible on mobile');
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)<=2,'The worker failure dialog must not overflow horizontally');
+   await page.screenshot({path:resolve(folder,'admin-import-simulador-worker-error-mobile.png'),fullPage:false});
+   await page.setViewportSize({width:1440,height:1000});
+   await page.unroute('**/api/admin/import',accepted);
+   await page.unroute(statusUrl,failed);
+   // Chromium can omit uploaded file bytes from a non-intercepted request event.
+   // Inspect the multipart source while paused, then send it to the real API.
+   let verifyRetry;
+   const resumed=new Promise((resolve,reject)=>{verifyRetry=async route=>{
+    try{await assertRetainedSource(route.request());await route.continue();resolve();}
+    catch(error){await route.abort();reject(error);}
+   };});
+   await page.route('**/api/admin/import',verifyRetry,{times:1});
+   await retry.click();
+   await resumed;
+   checks.push({kind,level:'universidad',passed:'POST 202 followed by a terminal worker error, retained document and category, visible mobile retry and resubmission without selecting another file'});
+  }else{
+   await retry.click();
+  }
+  checks.push({kind,level:'universidad',passed:'Supported format picker, actionable legacy Word rejection, retained filename and retry after transient extraction failure'});
+ }
  function documentHtml(title,careerIds,missingExplanation=false){
   const metadata={title,description:'Lee la pregunta y selecciona la respuesta correcta.',presentation:{title,summary:'Resuelve la pregunta de práctica.'},educationLevel:'ambos',schemaVersion:2,scoring:'objective',aggregation:'sum',source:'Documento de prueba local',
    careerLinks:careerIds.map((careerId,index)=>({id:'relation-'+index,careerId,dimensionId:'General',min:0,max:1,reason:'Explorar esta opción a partir del contenido de práctica.',source:'Criterio de prueba local'})),
@@ -60,12 +138,13 @@ export async function runAdminImportVisual({base,password,folder}) {
    await page.goto(base+'/admin/evaluaciones?nivel='+level);await waitCatalog('evaluaciones',level);
    await page.getByRole('button',{name:'Importar documento',exact:true}).click();
    const dialog=page.getByRole('dialog'),html=documentHtml(title,[target.id,wrong.id]);
+   await dialog.getByText('Destino: '+levelName(level)+' · Tests.',{exact:true}).waitFor();
    if(level==='bachillerato'){
     await dialog.getByRole('button',{name:'Pegar código HTML',exact:true}).click();
     await dialog.getByLabel('Código HTML del test',{exact:true}).fill(html);
     await dialog.getByRole('button',{name:'Extraer preguntas del HTML',exact:true}).click();
    }else{
-    await dialog.locator('input[type="file"]').setInputFiles({name:'test-universidad.html',mimeType:'text/html',buffer:Buffer.from(html)});
+    await uploadWithRecovery(dialog,'test',html);
    }
    await dialog.getByRole('button',{name:'Guardar todos como borradores',exact:true}).click({timeout:60000});
    await waitCatalog('evaluaciones',level);await card(title).waitFor();
@@ -97,6 +176,7 @@ export async function runAdminImportVisual({base,password,folder}) {
    await page.goto(base+'/admin/cursos?nivel='+level);await waitCatalog('cursos',level);
    await page.getByRole('button',{name:'Importar documento',exact:true}).click();
    const dialog=page.getByRole('dialog'),missingAI=level==='bachillerato'&&process.env.DB_DRIVER!=='mysql';
+   await dialog.getByText('Destino: '+levelName(level)+' · Simuladores.',{exact:true}).waitFor();
    const html=documentHtml(title,[target.id,wrong.id],missingAI);
    const aiUnavailable=missingAI?page.waitForResponse(response=>response.url().includes('/api/import-presentation')&&response.request().method()==='POST'&&(response.status()<300||response.status()>=400)):null;
    if(level==='bachillerato'){
@@ -104,7 +184,7 @@ export async function runAdminImportVisual({base,password,folder}) {
     await dialog.getByLabel('Código HTML del simulador',{exact:true}).fill(html);
     await dialog.getByRole('button',{name:'Importar HTML',exact:true}).click();
    }else{
-    await dialog.getByLabel('Seleccionar documento del simulador',{exact:true}).setInputFiles({name:'simulador-universidad.html',mimeType:'text/html',buffer:Buffer.from(html)});
+    await uploadWithRecovery(dialog,'simulador',html);
    }
    await page.getByLabel('Nombre del simulador',{exact:true}).waitFor({timeout:60000});
    const choices=page.getByRole('group',{name:level==='bachillerato'?'Áreas y figuras de bachillerato':'Carreras del simulador',exact:true});
