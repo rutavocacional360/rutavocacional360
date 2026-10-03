@@ -57,7 +57,9 @@ try{
   assert(main.includes(level==='bachillerato'?'Importación escolar QA':'Importación universitaria QA'));
   assert(!main.includes(level==='bachillerato'?'Importación universitaria QA':'Importación escolar QA'),'Opposite-route import history leaks');
   assert(!html.includes('Todas las rutas')&&!html.includes('value="ambos"'));
-  assert.equal(main.includes('Usar plantilla de Bachillerato'),level==='bachillerato');
+  assert(!main.includes('Usar plantilla de Bachillerato'));
+  assert(main.indexOf('Editar con IA')<main.indexOf('Gestionar test'),'AI editor action must be visible outside collapsed actions');
+  click('Editar con IA');const aiDraft=globalThis.__adminEdited.at(-1);assert.equal(aiDraft.educationLevel,level);assert.equal(aiDraft.status,'Borrador');assert.notEqual(aiDraft.id,'intereses');
   click('Crear test');assert.equal(globalThis.__adminEdited.at(-1).educationLevel,level);assert(globalThis.__adminNavigations.at(-1).includes('nivel='+level));
   click('Crear copia para '+(level==='bachillerato'?'Bachillerato':'Universidad'));
   const legacyCopy=globalThis.__adminEdited.at(-1);assert.equal(legacyCopy.educationLevel,level);assert.deepEqual(legacyCopy.studentIds,[level==='bachillerato'?'school-user':'uni-user']);assert.equal(legacyCopy.careerLinks.length,1);assert.equal(legacyCopy.careerLinks[0].careerId.startsWith('bachillerato:'),level==='bachillerato');

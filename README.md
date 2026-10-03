@@ -51,8 +51,11 @@ crea una copia para Bachillerato o Universidad antes de volver a asignarlos. Las
 importaciones anteriores se clasifican desde su historial. Ningún resultado
 anterior cambia de ruta al crear estas copias.
 
-«Usar plantilla de Bachillerato» prepara un cuestionario interno de intereses
-editable. Cursos también conserva sus dos categorías al crear e importar
+Tests y cursos muestran «Editar con IA» directamente en cada elemento. Los tests
+publicados se editan en una nueva versión y los borradores conservan su contenido.
+La introducción, las opciones de estudio y el autocompletado del simulador se
+revisan en sus editores antes de publicar. No se ofrecen plantillas de creación.
+Cursos conserva sus dos categorías al crear e importar
 simuladores. Revisa preguntas, claves y asignaciones antes de publicar. Las notas
 de práctica no determinan la modalidad recomendada: la orientación utiliza los
 intereses entregados. Las relaciones con intereses y actividades son reglas

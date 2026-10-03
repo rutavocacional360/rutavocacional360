@@ -65,6 +65,8 @@ for(const level of ['bachillerato','universidad']){
  globalThis.__trainingQuery='nivel='+level;globalThis.__trainingNavigations=[];globalThis.__trainingButtons=[];
  globalThis.__trainingFixture={careers:[],simulators:['bachillerato','universidad'].map(educationLevel=>({instrument:{description:'Preparación QA'},id:educationLevel,title:'Simulador '+educationLevel,educationLevel,status:'draft',version:1,durationMinutes:30,careerIds:[],questions:[]})),attempts:[]};
  const markup=renderToStaticMarkup(React.createElement(AdminCourses));
+ assert(markup.indexOf('Editar con IA')<markup.indexOf('Gestionar simulador'));
+ globalThis.__trainingButtons.find(b=>b.children==='Editar con IA').onClick();assert(globalThis.__trainingNavigations.at(-1).includes('editar='+level),'AI action opens the selected draft');
  assert(markup.includes('Simulador '+level));assert(!markup.includes('Simulador '+(level==='bachillerato'?'universidad':'bachillerato')));
  const other=level==='bachillerato'?'Universidad':'Bachillerato';globalThis.__trainingButtons.find(b=>b.children===other).onClick();assert.equal(globalThis.__trainingNavigations.at(-1),'/admin/cursos?nivel='+other.toLowerCase());
 }
