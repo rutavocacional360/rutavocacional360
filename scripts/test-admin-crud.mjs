@@ -129,7 +129,13 @@ try {
  let statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[originalStatusKey]:'Archivado'},0);
  assert(!(await api.availableOriginals(student)).some(t=>t.id===original.id));
  assert.equal((await db.context(()=>startTest(student,original.id))).id,originalAttempt.id,'Archiving retains in-progress attempts');
+ const originalDraftKey='rv360:answers:'+original.id+':'+original.version;
+ const originalAnswers=Object.fromEntries(original.questions.map(q=>[q.id,(q.options||original.options)[0].value]));
+ const oldDraft=await db.prepare('SELECT revision FROM documents WHERE owner=? AND key=?').get(student.id,originalDraftKey);
+ const savedDraftRevision=await saveDocument(student,originalDraftKey,originalAnswers,oldDraft?.revision||0);
+ assert.deepEqual(await document(student.id,originalDraftKey),originalAnswers,'An archived active attempt can still save its snapshot answers');
  await db.prepare("UPDATE assessment_attempts SET state='expired' WHERE id=?").run(originalAttempt.id);
+ await assert.rejects(saveDocument(student,originalDraftKey,originalAnswers,savedDraftRevision),e=>e.status===400,'Expired archived snapshots cannot authorize draft saves');
  await assert.rejects(db.context(()=>startTest(student,original.id)),e=>e.status===403);
  statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[originalStatusKey]:'Eliminado'},statusRevision);
  assert.equal(await api.instrumentFor(student,original.id),undefined,'Deleted original cannot be submitted from a frozen battery');

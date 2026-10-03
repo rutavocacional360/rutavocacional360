@@ -96,8 +96,12 @@ export async function instrumentFor(user: any, id: string) {
   return selected&&testMatchesLevel(selected,level)?routeTest(selected,level):undefined;
 }
 export async function validateDraft(user: any, key: string, value: any) {
+  const level = await studentEducationLevel(user);
+  const open = await db.prepare("SELECT snapshot FROM assessment_attempts WHERE user_id=? AND state='in_progress'").all(user.id);
+  const active = open.map((row: any) => JSON.parse(row.snapshot)).find((test: any) => answerKey(test) === key && testMatchesLevel(test, level));
   const run = await battery(user, true);
   const t =
+    (active && routeTest(active, level)) ||
     run?.instruments.find((t: any) => answerKey(t) === key) ||
     (await asyncFind(
       await document(
