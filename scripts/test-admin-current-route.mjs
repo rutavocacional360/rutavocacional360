@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdirSync,mkdtempSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {createRequire} from 'node:module';
+
+mkdirSync('.qa-tools',{recursive:true});
+const folder=mkdtempSync(resolve('.qa-tools','admin-current-route-'));
+const outfile=resolve(folder,'route.cjs');
+await build({entryPoints:['components/kit/features/student/report-route.ts'],bundle:true,platform:'node',format:'cjs',outfile});
+const {currentRouteReport}=createRequire(import.meta.url)(outfile);
+const school={id:'school',educationLevel:'bachillerato',createdAt:'2026-10-01T00:00:00Z'};
+const university={id:'university',educationLevel:'universidad',createdAt:'2026-10-03T00:00:00Z'};
+const history=[university,school],copy=structuredClone(history);
+assert.equal(currentRouteReport(history,{stage:'Estoy eligiendo mi bachillerato'}),school,'Returning to EGB must not default to the newer university report');
+assert.equal(currentRouteReport(history,{stage:'Me gradué del colegio'}),university);
+assert.equal(currentRouteReport([school],{stage:'Me gradué del colegio'}),undefined,'Without a current-route report, show the empty state instead of another route');
+assert.equal(currentRouteReport(history,{}),university,'Legacy users without a saved stage retain the latest report');
+const legacy={id:'legacy',profile:{stage:'Estoy eligiendo mi bachillerato'}};
+assert.equal(currentRouteReport([university,legacy],{stage:'Estoy eligiendo mi bachillerato'}),legacy);
+assert.deepEqual(history,copy,'Selecting the current report must preserve historical reports');
+console.log('PASS admin current route: stage changes, missing current report, legacy snapshots and preserved history.');

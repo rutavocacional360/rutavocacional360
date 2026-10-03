@@ -107,7 +107,7 @@ try{
   child.stdout.on('data',()=>{});child.stderr.on('data',()=>{});
   try{
    let ready=false;
-   for(let n=0;n<40;n++){
+   for(let n=0;n<120;n++){
     if(startupError||child.exitCode!==null)throw Error('The isolated HTTP server could not start.');
     try{const r=await fetch(base+'/api/health');if(r.ok){ready=true;break;}}catch{}
     await new Promise(r=>setTimeout(r,250));
@@ -162,7 +162,7 @@ try{
    const {runAssessmentImportHttp}=await import('./test-assessment-import-http.mjs');
    await runAssessmentImportHttp({base,adminCookie,studentCookie:cookie});
    const {runSchoolTrainingHttp}=await import('./test-school-training-http.mjs');
-   await runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate});
+   await runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate,db});
    if(process.argv.includes('--visual')){
     const {runGuidanceVisual}=await import('./test-guidance-visual.mjs');
     await runGuidanceVisual({base,password,folder,schoolPracticeTemplate});

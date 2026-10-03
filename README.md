@@ -280,7 +280,7 @@ Abre un navegador aislado con cuentas sintéticas y una base temporal. Comprueba
 formularios, persistencia, cambio Técnico/Ciencias, recomendaciones, detalle de
 carrera, catálogo completo, renderizado y descarga del PDF y consulta administrativa.
 Guarda capturas de escritorio, tableta y móvil y `visual-results.json` en la carpeta
-`.qa-tools/guidance-*` indicada al terminar. La vista inicial resume cuatro carreras;
-la pestaña de carreras conserva el listado completo y sus universidades desplegables.
+`.qa-tools/guidance-*` indicada al terminar. Mi orientación muestra las opciones
+de la etapa actual; en Universidad incluye las carreras y sus universidades desplegables.
 El visor PDF tiene una pestaña propia y la política CSP permite leer los archivos
 `blob:` generados localmente, sin habilitar conexiones a servidores externos.

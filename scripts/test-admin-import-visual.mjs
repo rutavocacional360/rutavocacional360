@@ -115,8 +115,8 @@ export async function runAdminImportVisual({base,password,folder}) {
     await page.getByText(university.offers[0].institution,{exact:true}).first().waitFor();
    }
    if(missingAI){
-    const response=await aiUnavailable;assert.equal(response.status(),503);assert.equal((await response.json()).code,'AI_CONFIG');
-    await page.getByText(/El servicio de IA necesita configuración\./).waitFor();
+    const response=await aiUnavailable;assert.equal(response.status(),503);const failure=await response.json();assert.equal(failure.code,'AI_CONFIG');
+    assert(failure.error);await page.getByText(failure.error,{exact:false}).waitFor();
     await page.getByRole('navigation',{name:'Editor de simulador'}).getByRole('button',{name:/Puntuación$/}).click();
     await page.getByLabel('Explicación al estudiante',{exact:true}).fill('Sumar dos unidades y otras dos da cuatro unidades.');
     checks.push({kind:'AI fallback',level,passed:'Missing provider configuration remains actionable; imported questions can be completed manually and saved'});

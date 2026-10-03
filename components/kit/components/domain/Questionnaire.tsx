@@ -107,9 +107,9 @@ export function Questionnaire({
           quieras.
         </p>
         <p className="muted">
-          En Mis resultados → Bachillerato encontrarás tu afinidad con Ciencias
-          o Técnico. En Universidad puedes explorar las carreras y dónde estudiarlas.
-          Consulta también la pestaña Recomendaciones.
+          En Mis resultados encontrarás la orientación de tu etapa educativa.
+          Abre Mi orientación para consultar tus opciones y los siguientes pasos,
+          Resultados por test para revisar tus respuestas e Informe PDF para descargar el documento.
         </p>
         <div className="row">
           <Button onClick={() => navigate("resultados")}>
@@ -190,8 +190,8 @@ export function Questionnaire({
         </div>
       </Card>
       <Card className="stack">
-        <h2>¿Ciencias o Técnico? Descubre tu ruta</h2>
-        <p className="muted">Al entregar tus tests, consulta Bachillerato para comparar Ciencias y Técnico, Universidad para explorar carreras e instituciones, y Recomendaciones para organizar tus siguientes pasos. Si falta información, el informe te indicará qué completar.</p>
+        <h2>Consulta la orientación de tu etapa</h2>
+        <p className="muted">Al entregar tus tests, abre Mis resultados y consulta Mi orientación para comparar las opciones de tu etapa y organizar tus siguientes pasos. Si falta información, el informe te indicará qué completar.</p>
         <Button variant="secondary" loading={submitting} onClick={async()=>{
           setSubmitting(true);setSubmitError('');
           try{await flush();navigate('resultados');}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 
-export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate}){
+export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate,db}){
  const request=async(path,body,cookie,method=body?'POST':'GET',status=200)=>{
   const r=await fetch(base+'/api/'+path,{method,headers:{Origin:base,Cookie:cookie||'','Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
   const value=await r.json();assert.equal(r.status,status,path+': '+(value.error||''));return {value,cookie:r.headers.get('set-cookie')?.split(';')[0]};
@@ -46,6 +46,24 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
   const resumed=await student('training/simulator/start',{simulatorId:published.id,mode:'practice'});assert.equal(resumed.id,started.id);
   const finished=await student('training/finish',{id:started.id});assert.equal(finished.result.percent,100);
   assert.equal((await student('training/attempt?id='+started.id)).result.percent,100);
+  const exams=await Promise.all([1,2].map(()=>student('training/simulator/start',{simulatorId:published.id,mode:'exam'})));
+  assert.equal(exams[0].id,exams[1].id,'Concurrent exam starts must share a single attempt');
+  assert(Date.parse(exams[0].expires_at)>Date.now());
+  assert(!JSON.stringify(exams[0]).includes('correctValues'));
+  const examAnswers=Object.fromEntries(template.questions.map(q=>[q.id,q.correctValues[0]]));
+  await student('training/answers',{id:exams[0].id,revision:0,answers:examAnswers,flags:[template.questions[0].id]},'PUT');
+  const reopened=await student('training/simulator/start',{simulatorId:published.id,mode:'exam'});
+  assert.equal(reopened.expires_at,exams[0].expires_at,'Reopening must not restart the clock');
+  assert.deepEqual(reopened.answers,examAnswers);
+  // Move only this synthetic attempt's deadline; no real-time sleep or real data.
+  await db.prepare('UPDATE training_attempts SET expires_at=? WHERE id=?').run(new Date(Date.now()-1000).toISOString(),reopened.id);
+  const expired=await student('training/attempt?id='+reopened.id);
+  assert.equal(expired.state,'graded');assert.equal(expired.result.percent,100);
+  const repeated=await Promise.all([1,2].map(()=>student('training/finish',{id:reopened.id})));
+  assert(repeated.every(attempt=>attempt.result.revision===1),'Repeated finalization must not duplicate grades');
+  const lastExam=await student('training/simulator/start',{simulatorId:published.id,mode:'exam'});
+  await student('training/finish',{id:lastExam.id});
+  await student('training/simulator/start',{simulatorId:published.id,mode:'exam'},'POST',409);
  }
  const t={...schoolOrientationTemplate(),id:'school-http-'+randomUUID(),version:'1',status:'Publicado',group:'Todos los estudiantes',due:''};
  const session=(await admin('session'));const custom=session.values['rv360:custom-tests']||[];
@@ -93,5 +111,6 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  console.log('PASS HTTP route change: explicit assessment snapshots, school-only catalog and recommendations, graduates see university-only tests, new university results and retained school history.');
  console.log('PASS HTTP admin CRUD: stale restore rejected, restore/delete persisted, test soft deletion and recovery, student visibility and retained grades.');
  console.log('PASS HTTP school workflow: EGB registration, undecided profile, admin drafts/publication, invalid levels/targets, hidden keys, practice/resume/grades, scoped orientation and archived history.');
+ console.log('PASS HTTP exams: concurrent starts, saved answers, unchanged deadline after reopen, automatic expiry, idempotent grading and attempt limits.');
  return {cookie,created};
 }

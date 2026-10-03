@@ -7,6 +7,13 @@ export function reportEducationLevel(report:any,profile?:any):EducationLevel {
   return defaultPreparationLevel(savedProfile||profile);
 }
 
+/** A student's current route takes precedence over the date of another route's report. */
+export function currentRouteReport(reports:any[],profile?:any):any {
+  if(!profile?.stage)return reports[0];
+  const level=defaultPreparationLevel(profile);
+  return reports.find(report=>reportEducationLevel(report,profile)===level);
+}
+
 export function reportNextSteps(report:any,profile?:any):string[] {
   const level=reportEducationLevel(report,profile);
   const steps=level==='bachillerato'?report?.analysis?.pathway?.nextSteps||[]:report?.analysis?.nextSteps||[];

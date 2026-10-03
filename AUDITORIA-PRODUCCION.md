@@ -176,3 +176,62 @@ el wrapper y reinicio directo aprobados. MySQL aislado: 21 tablas, transacciones
 permisos, registro, acceso y simuladores HTTP aprobados. Los datos y la contraseña
 del administrador se conservaron durante los reinicios. La disponibilidad en
 Hostinger debe confirmarse tras desplegar este cambio.
+
+## Revisión funcional y visual — 3 de octubre de 2026
+
+Se ejecutaron las pruebas con Node.js 24.14.0, compilación de producción y datos
+sintéticos aislados. Se corrigió un fallo reproducido en Chrome: al regresar de
+Universidad a Bachillerato, la ficha administrativa elegía por fecha el informe
+universitario. Ahora selecciona el informe de la etapa actual y conserva las otras
+versiones en el historial. Si no existe un informe de la etapa actual, no muestra
+otro nivel como vigente. La regresión está incluida en `npm test`.
+La sección Informes y PDF conserva el acceso al historial aunque todavía no haya
+un informe de la nueva etapa; al seleccionar otra versión, la vista PDF permanece abierta.
+
+También se corrigieron las indicaciones del cuestionario que mencionaban pestañas
+antiguas y se actualizaron las pruebas visuales a la navegación actual. Se añadieron
+pruebas HTTP de inicio simultáneo de exámenes, conservación de respuestas, reloj
+sin reinicio, vencimiento automático, límites de intentos y entrega sin duplicados.
+
+Resultados:
+
+- 37/37 suites aprobadas con Node.js 24.
+- Compilación Webpack, TypeScript y revisión de secretos del cliente aprobadas.
+- MySQL 8 aislado: migraciones, 21 tablas de aplicación, restricciones, rollback,
+  concurrencia y pruebas HTTP de seguridad, importación, evaluaciones y simuladores.
+- Paquete de ejecución sin fuentes, scripts ni archivos de entorno: primer inicio,
+  reinicios y conservación de credenciales aprobados.
+- Chrome: registro, perfil, cambio de etapa en ambas direcciones, informes escolar
+  y universitario, ficha administrativa, descarga y visualización PDF, publicación
+  de simulador y práctica completa con nota 100/100. Escritorio, tableta y móvil
+  sin desbordamiento en los recorridos comprobados.
+- Importaciones administrativas: HTML por texto y archivo, ambas categorías,
+  tests y simuladores, recarga de borradores, historial del navegador, cálculo con
+  el servidor, revisión y publicación. Sin IA configurada se conserva el contenido
+  y puede completarse manualmente.
+- Visor PDF: contenido, paginación, zoom, ajuste al ancho, error y reintento,
+  enlaces blob y remontaje; sin errores de JavaScript.
+- 17 pantallas públicas, de estudiante y de administración a 1440 px: HTTP correcto,
+  contenido visible, sin errores de JavaScript ni desbordamientos horizontales.
+- Cuestionario mediante interfaz: inicio explícito, respuesta, recarga con respuesta
+  conservada, revisión, entrega, informe completo y preparación habilitada.
+- `https://rutavocacional360.com`: comprobación de solo lectura aprobada, con MySQL
+  saludable, institución inicial lista y API administrativa anónima rechazada (401).
+
+La evidencia local está en `.qa-tools/system-*-current.log`,
+`.qa-tools/system-tests-node24.log`, `.qa-tools/guidance-4ThZZM/visual-results.json`
+y `.qa-tools/guidance-HXpVyH/admin-import-visual-results.json`. No publicar estos
+archivos ni las credenciales de revisión. La documentación temporal también queda
+excluida de Git y del contexto Docker.
+
+Reproducción: `npm test`, `npm run build`, `npm run test:integration`,
+`npm run test:guidance:visual`, `npm run test:admin:visual` y `npm run test:pdf`.
+Las pruebas de MySQL y arranque requieren bases locales nuevas terminadas en `_test`;
+las visuales requieren Playwright y Chrome, según las instrucciones del README.
+
+La corrección permanece local: no se desplegó al alojamiento durante esta revisión.
+La salud del dominio no acredita que ya incluya los cambios. Gemini real no pudo
+probarse por ausencia de `GEMINI_API_KEY` local. SMTP tampoco está configurado
+localmente; no se envió correo. Quedan por verificar esos servicios en Hostinger,
+la persistencia de archivos después del despliegue y la restauración de respaldos.
+No se declara una prueba de carga ni una auditoría completa de accesibilidad.

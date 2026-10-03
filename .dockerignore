@@ -4,6 +4,7 @@ node_modules
 .vercel
 .design-preview
 .qa-tools
+.documentacion-qa
 .local
 storage
 evidencia
