@@ -52,6 +52,25 @@ try {
  const ready=await trainingState(user);assert(ready.readiness.bachillerato.ready);assert.equal(ready.educationLevel,'bachillerato');assert.equal(ready.readiness.universidad.ready,false);assert.equal(ready.readiness.universidad.total,0);assert(ready.recommendations.length>0);assert(ready.recommendations.every(r=>r.careerId.startsWith('bachillerato:')));assert(ready.careers.every(c=>c.id.startsWith('bachillerato:')));
  assert(ready.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length<40,'Only result-related school targets are offered');
  assert(ready.simulators.some(s=>s.id===simulator.id));
+ // The exact specialty in a report must lead to published matching preparation.
+ const specialty=ready.recommendations.find(r=>!['bachillerato:ciencias','bachillerato:tecnico'].includes(r.careerId));
+ assert(specialty,'A complete differentiated school profile has a concrete preparation target');
+ const exactSimulator=await saveTraining(admin,'simulator',{...api.schoolPracticeTemplate(blank,'ciencias'),title:'Simulador de la especialidad QA',careerIds:[specialty.careerId]});
+ const otherCareer=ready.careers.find(c=>!ready.recommendations.some(r=>r.careerId===c.id)&&!['bachillerato:ciencias','bachillerato:tecnico'].includes(c.id));
+ assert(otherCareer,'There are unrelated specialties outside the recommendation');
+ const unrelatedSimulator=await saveTraining(admin,'simulator',{...api.schoolPracticeTemplate(blank,'tecnico'),title:'Especialidad ajena QA',careerIds:[otherCareer.id]});
+ const connected=await trainingState(user);
+ assert(connected.simulators.some(s=>s.id===exactSimulator.id));
+ assert(!connected.simulators.some(s=>s.id===unrelatedSimulator.id));
+ assert((await api.startDirectSimulator(user,exactSimulator.id,'practice')).id);
+ await assert.rejects(api.startDirectSimulator(user,unrelatedSimulator.id,'practice'),e=>e.status===403,'An unrecommended specialty cannot be opened via its direct simulator URL');
+
+ // Legacy simulators without direct targets inherit only the matching current-route course.
+ const inheritedTemplate={...api.schoolPracticeTemplate(blank,'ciencias'),title:'Simulador heredado del curso QA',careerIds:[],educationLevel:undefined};
+ const inheritedSimulator=await saveTraining(admin,'simulator',inheritedTemplate);
+ const inheritedCourse=await saveTraining(admin,'course',{...course,id:'',version:0,revision:0,title:'Curso vinculado a la especialidad QA',careerIds:[specialty.careerId],activities:[{...course.activities[0],simulatorId:inheritedSimulator.id,simulatorVersion:inheritedSimulator.version}]});
+ assert((await trainingState(user)).simulators.some(s=>s.id===inheritedSimulator.id));
+ assert((await api.startDirectSimulator(user,inheritedSimulator.id,'practice')).id,'A simulator inheriting a school specialty uses school prerequisites');
  const started=await api.startDirectSimulator(user,simulator.id,'practice');assert(started.id);
  const enrollment=await api.enroll(user,course.id);assert(enrollment.id);
  const schoolTest={...api.schoolOrientationTemplate(),id:'school-extra',version:'1',status:'Publicado',group:'Todos los estudiantes',due:''};

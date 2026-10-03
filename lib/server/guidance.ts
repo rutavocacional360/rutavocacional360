@@ -80,6 +80,11 @@ export async function ensureGuidance(user:any,_regenerate=false) {
   if(educationLevel==='bachillerato'){
     report.analysis.recommendations=[]; report.catalog=[]; report.offers={}; report.catalogSource=schoolCatalogSource as any;
     const p=report.analysis.pathway;
+    if(routeReadiness.ready&&p.suggested==='pendiente'){
+      p.title='Tus tests están completos: orientación por revisar';
+      p.reason='Los resultados publicados conservan tus respuestas, pero no incluyen un perfil de intereses o criterios cumplidos que permitan priorizar una modalidad o figura. Explora ambas modalidades y conversa con tu orientador para contrastar tus intereses.';
+      p.rankingNote='No se priorizan áreas ni figuras con estos resultados. Los tests ya están completos; consulta el catálogo y las actividades para comparar opciones.';
+    }
     p.science=p.science.map(o=>({...o,careers:[]})); p.technical=p.technical.map(o=>({...o,careers:[]}));
     p.context='Compara Bachillerato en Ciencias y Técnico, sus asignaturas y actividades, según tus intereses.';
     p.bridge='Consulta la oferta de tu colegio y conversa con tu orientador antes de elegir modalidad.';

@@ -1,7 +1,7 @@
 const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 const {technicalOptions,educationStages,schoolCatalogSource,baccalaureateModalities,complementaryArtsOffer}=require('../components/kit/data/baccalaureate.ts');
-const {schoolTrainingTargets,defaultPreparationLevel,preparationLevel,schoolTarget}=require('../components/kit/data/school-training.ts');
+const {schoolTrainingTargets,defaultPreparationLevel,preparationLevel,schoolTarget,preparationHref,trainingTargetMatches}=require('../components/kit/data/school-training.ts');
 const {schoolOrientationTemplate,schoolPracticeTemplate}=require('../components/kit/data/school-templates.ts');
 const {calculateTest,instrumentProblems}=require('../components/kit/lib/test-engine.ts');
 const {academicResult,simulatorProblems}=require('../components/kit/lib/training-engine.ts');
@@ -31,6 +31,16 @@ assert.equal(schoolTrainingTargets.length,40);assert(schoolTrainingTargets.every
 for(const stage of educationStages.filter(s=>/EGB/.test(s)))assert.equal(defaultPreparationLevel({stage}),'bachillerato');
 assert.equal(defaultPreparationLevel({stage:'Me gradué del colegio'}),'universidad');assert.equal(schoolTarget(null),false);assert.equal(schoolTarget(1),false);
 assert.equal(preparationLevel([],'bachillerato'),'bachillerato');
+assert.equal(preparationHref('bachillerato:contabilidad'),'/mi-ruta/cursos?carrera=bachillerato%3Acontabilidad');
+assert(trainingTargetMatches(['bachillerato:tecnico'],'bachillerato:contabilidad'),'A specialty can use the general preparation of its own modality');
+assert(trainingTargetMatches(['bachillerato:ciencias'],'bachillerato:ciencias-exactas'));
+assert(!trainingTargetMatches(['bachillerato:contabilidad'],'bachillerato:tecnico'),'A modality cannot open every unrecommended specialty');
+assert(!trainingTargetMatches(['bachillerato:ciencias'],'bachillerato:contabilidad'));
+assert(!trainingTargetMatches(['bachillerato:informatica'],'bachillerato:contabilidad'));
+assert(!trainingTargetMatches(['bachillerato:tecnico'],'university-career'));
+assert(!trainingTargetMatches(['bachillerato:tecnico'],'bachillerato:inexistente'));
+assert(trainingTargetMatches(['university-career'],'university-career'));
+
 const t={...schoolOrientationTemplate(),id:'school',version:'1'};
 assert.deepEqual(instrumentProblems(t),[]);
 function submission(test,dimension){const answers=Object.fromEntries(test.questions.map(q=>[q.id,q.dimension===dimension?5:2]));const evaluation=calculateTest(test,answers);return {id:test.id,instrument_id:test.id,version:test.version,created_at:'2026-10-01T12:00:00Z',snapshot:JSON.stringify(test),answers:JSON.stringify(answers),scores:JSON.stringify(evaluation.scores),evaluation};}

@@ -33,7 +33,7 @@ import type {
 } from "@/components/kit/lib/training-types";
 import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
-import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,preparationLevel} from '@/components/kit/data/school-training';
+import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
 type User = {
@@ -515,7 +515,7 @@ async function recommendations(u: User) {
   return recs.filter((r: any, i: number) => recs.findIndex((x: any) => x.careerId === r.careerId) === i);
 }
 function matchesRecommendations(course: Course, recs: any[]) {
-  return course.careerIds.some(id => recs.some(r => r.careerId === id)) ||
+  return recs.some(r => trainingTargetMatches(course.careerIds,r.careerId)) ||
     trainingCatalog().careers.some(c => course.fields.includes(c.area) && recs.some(r => r.careerId === c.id));
 }
 export async function trainingState(u: User) {
@@ -581,8 +581,7 @@ export async function trainingState(u: User) {
     simulators: unique((await rows(u, "simulator")).filter((s) => s.status !== "draft"))
       .filter(
         (s: Simulator) =>
-          s.status === "published" && simulatorCareerIds(s, courses)
-            .some((id) => recs.some((r) => r.careerId === id)),
+          s.status === "published" && recs.some(r=>trainingTargetMatches(simulatorCareerIds(s,courses),r.careerId)),
       )
       .map((s: Simulator) => ({
         id: s.id,
@@ -886,10 +885,12 @@ export async function startDirectSimulator(u: User, simulatorId: string, mode: s
     const s = (await rows(u, "simulator")).find((s) => s.id === simulatorId && s.status !== "draft") as Simulator | undefined;
     if (!s || s.status !== "published" || !s.modes.includes(mode as any))
       fail("Simulador no disponible.", 404);
-    await requireCompletedAssessments(u, preparationLevel(s.careerIds,s.educationLevel));
-    const courses = (await rows(u, "course")).filter((c) => canRead(c, u));
+    const currentLevel=await studentEducationLevel(u);
+    const courses = (await rows(u, "course")).filter((c) => canRead(c,u)&&preparationLevel(c.careerIds,c.educationLevel)===currentLevel);
+    const careerIds=simulatorCareerIds(s,courses);
+    await requireCompletedAssessments(u, preparationLevel(careerIds,s.educationLevel));
     const recs = await recommendations(u);
-    if (!simulatorCareerIds(s, courses).some((id) => recs.some((r) => r.careerId === id)))
+    if (!recs.some(r=>trainingTargetMatches(careerIds,r.careerId)))
       fail("Este simulador no corresponde a tus carreras recomendadas.", 403);
     const problems = simulatorProblems(s);
     if (problems.length) fail("El simulador necesita revisión: " + problems[0], 409);
@@ -898,7 +899,7 @@ export async function startDirectSimulator(u: User, simulatorId: string, mode: s
     if (!e) {
       const snapshot = {id: courseId, version: 1, revision: 0, status: "published", title: s.title,
         description: s.instrument.description, objectives: "Autopreparación", level: "General", type: "general",
-        careerIds: simulatorCareerIds(s, courses), fields: [], studentIds: [u.id], access: "selected",
+        careerIds, fields: [], studentIds: [u.id], access: "selected",
         activities: [{id: s.id, module: "Preparación", title: s.title, kind: "simulator", content: "",
           required: true, completion: "submit", simulatorId: s.id, simulatorVersion: s.version}]};
       e = {id: randomUUID(), user_id: u.id, course_id: courseId, course_version: 1,

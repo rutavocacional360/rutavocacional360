@@ -15,7 +15,7 @@ const tests = [
   'test-school-training.cjs', 'test-simulator-import.cjs',
   'test-simulator-clock.cjs', 'test-simulator-autofill.cjs',
   'test-import-presentation.cjs', 'test-import-guidance.cjs',
-  'test-document-import.mjs', 'test-assessment-import.mjs', 'test-local-guidance.cjs',
+  'test-document-import.mjs', 'test-assessment-import.mjs', 'test-local-guidance.cjs', 'test-guidance-normalization.cjs', 'test-guidance-normalization-server.mjs',
   'test-school-guidance.cjs', 'test-guidance-ui.mjs',
   'test-admin-session-renewal.cjs', 'test-guidance-server.mjs',
 ];

@@ -1,6 +1,15 @@
 import {scienceOptions,technicalOptions,isChoosingBaccalaureate} from './baccalaureate';
 export type EducationLevel='bachillerato'|'universidad';
 export const schoolTarget=(id:unknown):id is string=>typeof id==='string'&&id.startsWith('bachillerato:');
+export const preparationHref=(careerId='')=>'/mi-ruta/cursos'+(careerId?'?carrera='+encodeURIComponent(careerId):'');
+/** General preparation belongs to a related specialty, without opening other specialties. */
+export function trainingTargetMatches(resourceIds:readonly string[]|undefined,careerId:string){
+ if(resourceIds?.includes(careerId))return true;
+ if(!schoolTarget(careerId))return false;
+ const parent=scienceOptions.some(o=>'bachillerato:'+o.id===careerId)?'bachillerato:ciencias':
+  technicalOptions.some(o=>'bachillerato:'+o.id===careerId)?'bachillerato:tecnico':undefined;
+ return !!parent&&!!resourceIds?.includes(parent);
+}
 export const preparationLevel=(ids:string[]=[],explicit?:string)=>ids.length?(ids.some(schoolTarget)?'bachillerato':'universidad'):explicit==='bachillerato'?'bachillerato':'universidad';
 export const schoolTrainingTargets=[
  {id:'bachillerato:ciencias',name:'Bachillerato en Ciencias',area:'Ciencias · formación general',description:'Compara asignaturas y actividades del tronco común.',educationLevel:'bachillerato',offers:[]},
@@ -10,13 +19,14 @@ export const schoolTrainingTargets=[
 ];
 export function schoolPreparationRecommendations(report:any){
  const p=report?.analysis?.pathway;
- if(!p||p.suggested==='pendiente'||report.readiness?.bachillerato?.ready!==true)return [];
- const related=new Set([...(p.science||[]),...(p.technical||[])].map(o=>'bachillerato:'+o.id));
- if(['ciencias','ambas'].includes(p.suggested))related.add('bachillerato:ciencias');
- if(['tecnico','ambas'].includes(p.suggested))related.add('bachillerato:tecnico');
- return schoolTrainingTargets.filter(t=>related.has(t.id)).map(t=>({careerId:t.id,educationLevel:'bachillerato',reason:
-  [...(p?.science||[]),...(p?.technical||[])].find(o=>'bachillerato:'+o.id===t.id)?.reason||
-  p.reason,
-  suggested:true}));
+ if(!p||p.suggested==='pendiente'||report.readiness?.bachillerato?.ready!==true||report.educationLevel&&report.educationLevel!=='bachillerato')return [];
+ const options=p.suggested==='tecnico'?[...(p.technical||[]),...(p.science||[])]:[...(p.science||[]),...(p.technical||[])];
+ const ids=options.map(o=>'bachillerato:'+o.id);
+ if(['ciencias','ambas'].includes(p.suggested))ids.push('bachillerato:ciencias');
+ if(['tecnico','ambas'].includes(p.suggested))ids.push('bachillerato:tecnico');
+ return [...new Set<string>(ids)].flatMap(id=>{
+  const target=schoolTrainingTargets.find(t=>t.id===id);
+  return target?[{careerId:id,educationLevel:'bachillerato',reason:options.find(o=>'bachillerato:'+o.id===id)?.reason||p.reason,suggested:true}]:[];
+ });
 }
 export const defaultPreparationLevel=(profile:any):EducationLevel=>isChoosingBaccalaureate(profile?.stage)?'bachillerato':'universidad';

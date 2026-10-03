@@ -13,7 +13,7 @@ const technical=schoolGuidance(scores({R:25,I:15}),evidence,{baccalaureate:'tecn
 assert.equal(technical.suggested,'tecnico');
 assert(technical.technical.some(o=>o.careers.some(c=>c.id==='software')));
 assert.equal(technical.profile.specialty,'Informática');
-const specific=schoolGuidance(scores({R:25,I:20}),evidence,{learningPreference:'aplicar'},[...careers,{id:'bio',name:'Bioingeniería',areaId:'ingenieria'},{id:'auto',name:'Ingeniería Automotriz',areaId:'ingenieria'}]);
+const specific=schoolGuidance(scores({R:25,I:20}),evidence,{learningPreference:'aplicar'},[...careers,{id:'bio',name:'Bioingeniería',areaId:'ingenieria'},{id:'auto',name:'Ingeniería Automotriz',areaId:'ingenieria'}],[{optionId:'informatica',dimensionId:'I',value:20,min:15,max:25,reason:'Explora soporte informático según el criterio documentado.',evidence:['intereses:dimension:I']}]);
 assert.deepEqual(specific.technical.find(o=>o.id==='informatica').careers.map(c=>c.id),['software']);
 assert.deepEqual(specific.technical.find(o=>o.id==='automotriz').careers.map(c=>c.id),['auto']);
 assert.equal(schoolGuidance(scores({R:25,I:25}),evidence).suggested,'ambas');
