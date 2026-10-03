@@ -2,7 +2,7 @@ import {spawnSync} from 'node:child_process';
 
 // No production database, mailbox or AI API is contacted by this suite.
 const tests = [
-  'test-admin-crud.mjs',
+  'test-admin-crud.mjs', 'test-assessment-admin-routes.mjs', 'test-admin-tests-ui.mjs',
   'test-training-readiness.mjs',
   'test-training-ui.mjs',
   'test-ai-flows.mjs', 'test-student-guidance-ai.mjs',
@@ -11,11 +11,11 @@ const tests = [
   'test-security-boundaries.mjs', 'test-production-config.mjs', 'test-database-config.mjs',
   'test-deployment.cjs', 'test-deployment-readiness.mjs',
   'test-mail-config.mjs', 'test-account-mail.mjs',
-  'test-test-engine.cjs', 'test-training-engine.cjs', 'test-training-report.cjs',
+  'test-test-engine.cjs', 'test-training-engine.cjs', 'test-training-report.cjs', 'test-report-routes.mjs',
   'test-school-training.cjs', 'test-simulator-import.cjs',
   'test-simulator-clock.cjs', 'test-simulator-autofill.cjs',
   'test-import-presentation.cjs', 'test-import-guidance.cjs',
-  'test-document-import.mjs', 'test-local-guidance.cjs',
+  'test-document-import.mjs', 'test-assessment-import.mjs', 'test-local-guidance.cjs',
   'test-school-guidance.cjs', 'test-guidance-ui.mjs',
   'test-admin-session-renewal.cjs', 'test-guidance-server.mjs',
 ];

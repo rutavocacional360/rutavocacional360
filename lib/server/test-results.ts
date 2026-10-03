@@ -2,19 +2,23 @@ import { responseDistribution } from "@/components/kit/lib/response-distribution
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { jsPDF } from "jspdf";
-import { db, fail, resultIsReleased } from "./store";
+import { db, document, fail, resultIsReleased } from "./store";
+import { submissionRoutes } from "./assessment-route";
+import { defaultPreparationLevel, schoolTarget } from "@/components/kit/data/school-training";
+import { technicalCatalogSource } from "@/components/kit/data/technical-figures";
+import { calculateTest } from "@/components/kit/lib/test-engine";
 import { answerText } from "@/components/kit/lib/test-answer-text";
 export async function testPdf(user: any, id: string) {
   const row = (await db
     .prepare(
-      "SELECT s.*,u.name,u.institutionId FROM submissions s JOIN users u ON u.id=s.user_id WHERE s.id=?",
+      "SELECT s.*,u.name,u.institutionId,u.groupName FROM submissions s JOIN users u ON u.id=s.user_id WHERE s.id=?",
     )
     .get(id)) as any;
   if (
     !row ||
     (user.role === "student" && row.user_id !== user.id) ||
     (user.role !== "student" &&
-      (user.role !== "admin" || row.institutionId !== user.institutionId))
+      (!["admin","orientador"].includes(user.role) || row.institutionId !== user.institutionId || (user.role === "orientador" && row.groupName !== user.group)))
   )
     fail("Informe no disponible.", 403);
   if (user.role === "student" && !(await resultIsReleased(row)))
@@ -24,15 +28,13 @@ export async function testPdf(user: any, id: string) {
       "SELECT result,revision FROM assessment_results WHERE submission_id=? ORDER BY revision DESC LIMIT 1",
     )
     .get(id)) as any;
-  if (!saved)
-    fail(
-      "Este informe utiliza el formato anterior. Consulta su descarga histórica.",
-      409,
-    );
-  const result = JSON.parse(saved.result),
-    t = JSON.parse(row.snapshot),
-    answers = JSON.parse(row.answers),
-    pdf = new jsPDF();
+  const t = JSON.parse(row.snapshot), answers = JSON.parse(row.answers);
+  const result = saved ? JSON.parse(saved.result) : calculateTest({...t,scoring:t.scoring||(t.id==='valores'?'manual':'dimensions'),aggregation:t.aggregation||'sum'},answers);
+  const profile=await document(row.user_id,'rv360:profile',{});
+  const routeOf=await submissionRoutes({id:row.user_id},defaultPreparationLevel(profile));
+  const school=routeOf(row)==='bachillerato';
+  const related=(result.careers||[]).filter((career:any)=>schoolTarget(career.careerId)===school);
+  const pdf = new jsPDF();
   let y = 40;
   const header = () => {
     pdf.setFillColor(244, 242, 253);
@@ -54,7 +56,7 @@ export async function testPdf(user: any, id: string) {
     pdf.setTextColor(24, 43, 72);
     pdf.text("Ruta Vocacional 360°", 40, 15);
     pdf.setFontSize(9);
-    pdf.text("RESULTADOS DE EVALUACIÓN", 40, 22);
+    pdf.text(school?"RESULTADOS DE BACHILLERATO":"RESULTADOS DE UNIVERSIDAD", 40, 22);
   };
   const line = (text: string, size = 11, bold = false) => {
     pdf.setFont("helvetica", bold ? "bold" : "normal");
@@ -88,7 +90,7 @@ export async function testPdf(user: any, id: string) {
     "Versión " +
       row.version +
       " · Revisión del resultado " +
-      saved.revision +
+      (saved?.revision || 1) +
       " · " +
       new Date(row.created_at).toLocaleDateString("es-EC"),
   );
@@ -137,14 +139,15 @@ export async function testPdf(user: any, id: string) {
     for (const item of group.items)
       line(item.label + ": " + item.count + " de " + group.answered, 10);
   }
-  if (result.careers?.length) {
-    line("Carreras para explorar", 15, true);
-    for (const c of result.careers) {
+  if (related.length) {
+    line(school?"Figuras profesionales para explorar":"Carreras para explorar", 15, true);
+    for (const c of related) {
       line(c.careerName, 12, true);
       line(c.reason);
       line("Criterio: " + c.min + " a " + c.max + "; resultado: " + c.evidence);
       line("Fuente: " + c.source, 9);
-      for (const offer of c.offers || [])
+      if(school)line("Catálogo oficial: "+(c.sourceUrl||technicalCatalogSource.url),9);
+      for (const offer of school?[]:c.offers || [])
         line(
           offer.institution +
             " · " +

@@ -1,0 +1,27 @@
+﻿.assessment-manager > .ar-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+  padding-bottom: .6rem;
+  margin: 1.5rem 0;
+  border-bottom: 1px solid #dce3f1;
+}
+.assessment-manager > .ar-tabs > button {
+  min-height: 44px;
+  padding: .8rem 1.15rem;
+  border-radius: 12px;
+}
+.assessment-manager .test-manager-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+}
+.assessment-manager .test-builder-header { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .assessment-manager > .ar-tabs > button { flex: 1; }
+  .assessment-manager .test-manager-header-actions { width: 100%; }
+  .assessment-manager .test-manager-header-actions > button { flex: 1 1 160px; }
+  .assessment-manager .import-history .row.between { flex-wrap: wrap; align-items: flex-start; }
+  .assessment-manager .import-history .row.between > div { min-width: 0; overflow-wrap: anywhere; }
+  .assessment-manager .te-filters { grid-template-columns: minmax(0, 1fr); }
+}

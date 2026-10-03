@@ -140,6 +140,8 @@ export async function platformInstitution() {
   return org;
 }
 export async function assigned(test: any, user: any) {
+  // Older shared definitions remain in history and must be copied into an explicit route before new assignments.
+  if(!['bachillerato','universidad'].includes(test.educationLevel))return false;
   if(user.role==='student'){const {studentEducationLevel,testMatchesLevel}=await import('./assessment-route');if(!testMatchesLevel(test,await studentEducationLevel(user)))return false;}
   const platform = await document("system", "rv360:platform");
   return (

@@ -1,7 +1,7 @@
 import { nameProblem, emailProblem, passwordProblem, normalizeName } from "../validation";
 import { mailConfigured, mailConfig } from "./mail-config.mjs";
 import { sendAccountMail } from "./mail";
-import {defaultPreparationLevel} from '@/components/kit/data/school-training';
+import {transitionStudentRoute} from './assessment-route';
 import { educationProfile } from "./education";
 import { randomBytes } from "node:crypto";
 import {
@@ -49,14 +49,7 @@ export async function updateProfile(user: any, body: any) {
     await db
       .prepare("UPDATE users SET name=? WHERE id=?")
       .run(profile.name, user.id);
-    if(user.role==='student'&&defaultPreparationLevel(previous)!==defaultPreparationLevel(profile)){
-      const origin=await document(user.id,'rv360:assessment-route-origins',{});
-      const oldLevel=defaultPreparationLevel(previous);
-      for(const row of await db.prepare('SELECT id,snapshot FROM submissions WHERE user_id=?').all(user.id) as any[]){const test=JSON.parse(row.snapshot);if(!test.educationLevel||test.educationLevel==='ambos')origin[row.id] ||= oldLevel;}
-      await put(user.id,'rv360:assessment-route-origins',origin);
-      await db.prepare("UPDATE assessment_attempts SET state='expired' WHERE user_id=? AND state='in_progress'").run(user.id);
-      await db.prepare("DELETE FROM documents WHERE owner=? AND key LIKE 'rv360:answers:%'").run(user.id);
-    }
+    if(user.role==='student')await transitionStudentRoute(user.id,previous,profile);
     await put(user.id, "rv360:profile", profile);
     await db.exec("COMMIT");
   } catch (e) {

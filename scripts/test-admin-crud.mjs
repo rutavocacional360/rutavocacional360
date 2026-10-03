@@ -125,14 +125,15 @@ try {
  await assert.rejects(write([...(await tests()),{...schoolOrientationTemplate(),id:'invalid',version:'1',status:'Borrador',educationLevel:'invalid'}]));
  const original=(await api.availableOriginals(student))[0];
  const originalAttempt=await db.context(()=>startTest(student,original.id));
- let statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Archivado'},0);
+ const originalStatusKey='bachillerato:'+original.id;
+ let statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[originalStatusKey]:'Archivado'},0);
  assert(!(await api.availableOriginals(student)).some(t=>t.id===original.id));
  assert.equal((await db.context(()=>startTest(student,original.id))).id,originalAttempt.id,'Archiving retains in-progress attempts');
  await db.prepare("UPDATE assessment_attempts SET state='expired' WHERE id=?").run(originalAttempt.id);
  await assert.rejects(db.context(()=>startTest(student,original.id)),e=>e.status===403);
- statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Eliminado'},statusRevision);
+ statusRevision=await saveDocument(admin,'rv360:admin-original-status',{[originalStatusKey]:'Eliminado'},statusRevision);
  assert.equal(await api.instrumentFor(student,original.id),undefined,'Deleted original cannot be submitted from a frozen battery');
- await saveDocument(admin,'rv360:admin-original-status',{[original.id]:'Original'},statusRevision);
+ await saveDocument(admin,'rv360:admin-original-status',{[originalStatusKey]:'Original'},statusRevision);
  assert((await api.availableOriginals(student)).some(t=>t.id===original.id));
  await put(student.id,'rv360:battery',{id:'frozen-without-originals',frozen:true,instruments:[]});
  assert.equal((await api.instrumentFor(student,original.id)).id,original.id,'Restored original accessible even if absent from an older battery');

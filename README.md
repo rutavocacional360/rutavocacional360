@@ -35,22 +35,29 @@ proveedor conserva las respuestas y la orientación local, con un estado visible
 el informe solo indica análisis con IA después de una respuesta válida.
 
 
-La orientación distingue dos rutas: EGB Superior hacia BGU (Bachillerato) y BGU hacia
-educación superior (Universidad). El registro pide la etapa educativa sin obligar a
-elegir modalidad. Los tests pueden dirigirse a una ruta o a ambas; sus resultados se
-integran únicamente en la ruta configurada. Las respuestas anteriores se conservan.
+Administración → Evaluaciones tiene pestañas independientes de Bachillerato y
+Universidad. Crear, duplicar, importar y publicar conservan la categoría de la
+pestaña; las versiones y los estados de los tests originales se gestionan por
+ruta. Un documento puede importarse en cada categoría por separado. La
+importación mantiene esa categoría al reintentar y al guardar los borradores.
 
-En Administración → Evaluaciones, «Test de Bachillerato» prepara un cuestionario
-interno de intereses editable. En Cursos → Bachillerato se pueden crear o importar
-simuladores de Ciencias y Técnico. Revisa las preguntas,
-claves y asignaciones antes de publicar. Las notas de práctica no determinan la
-modalidad recomendada: la orientación usa los intereses entregados.
+Los tests personalizados anteriores sin categoría única conservan sus resultados
+en el historial. En Evaluaciones, abre «Tests anteriores sin categoría única» y
+crea una copia para Bachillerato o Universidad antes de volver a asignarlos. Las
+importaciones anteriores se clasifican desde su historial. Ningún resultado
+anterior cambia de ruta al crear estas copias.
 
-El catálogo técnico recoge las 34 figuras y 11 familias del Acuerdo
-[MINEDUC-MINEDUC-2024-00065-A](https://educacion.gob.ec/wp-content/plugins/download-monitor/download.php?force=1&id=22029).
-Su implementación es progresiva; no afirma que todos los colegios ofrezcan todas
-las figuras. Las relaciones con intereses y las actividades de exploración son
-reglas internas del sistema, no baremos acreditados por el Ministerio.
+«Usar plantilla de Bachillerato» prepara un cuestionario interno de intereses
+editable. Cursos también conserva sus dos categorías al crear e importar
+simuladores. Revisa preguntas, claves y asignaciones antes de publicar. Las notas
+de práctica no determinan la modalidad recomendada: la orientación utiliza los
+intereses entregados. Las relaciones con intereses y actividades son reglas
+internas; no son baremos acreditados por el Ministerio.
+
+Los informes PDF individuales y de orientación siguen una sola ruta e incluyen
+las respuestas, puntuaciones y orientación guardada con el estado real de la IA.
+Las copias integrales anteriores siguen disponibles en el historial; los informes
+nuevos se generan desde Mis resultados.
 
 `npm run test:school` verifica catálogo, etapas, separación de resultados y las dos
 plantillas. `npm run test:guidance:visual` prueba registro, publicación administrativa,
@@ -100,7 +107,7 @@ Los catálogos de evaluación y orientación son contenido del sistema, no regis
 
 ## Comprobar el despliegue
 
-Antes de publicar, ejecuta `npm test` (29 suites aisladas), `npm run build` y
+Antes de publicar, ejecuta `npm test` (suites aisladas), `npm run build` y
 `npm run test:integration`. La integración usa SQLite temporal por defecto;
 con `GUIDANCE_DB_DRIVER=mysql` exige una base MySQL local terminada en `_test`.
 `npm run test:startup` comprueba el arranque real, el puerto y la conservación del

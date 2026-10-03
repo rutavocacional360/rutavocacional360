@@ -1,4 +1,5 @@
 import {assessmentReadiness} from './assessment-readiness';
+import {transitionStudentRoute} from './assessment-route';
 import {defaultPreparationLevel} from '@/components/kit/data/school-training';
 import { nameProblem, emailProblem, passwordProblem, textProblem, normalizeName } from "../validation";
 import { randomUUID } from "node:crypto";
@@ -156,7 +157,7 @@ export async function manageUser(admin: any, body: any) {
         delete profile.firstName;
         delete profile.lastName;
       }
-      await put(id, "rv360:profile", {
+      const nextProfile = {
         ...profile,
         name,
         email,
@@ -168,7 +169,9 @@ export async function manageUser(admin: any, body: any) {
           typeof body.institution === "string"
             ? body.institution.slice(0, 120)
             : profile.institution || "",
-      });
+      };
+      if(existing&&role==='student')await transitionStudentRoute(id,profile,nextProfile);
+      await put(id, "rv360:profile", nextProfile);
       await db.exec("COMMIT");
     } catch (e) {
       await db.exec("ROLLBACK");

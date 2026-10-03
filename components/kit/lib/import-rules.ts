@@ -18,5 +18,6 @@ export function importedInstrument(entry:any,base:any,filename:string){
   q.options=q.options.map((o:any)=>({...o,contributions:{[q.dimension]:q.inverse?lower+upper-(o.points??o.value):o.points??o.value}}));
   q.inverse=false;
  }
- return {...base,...metadata,id:base.id,stableId:undefined,status:'Borrador',version:'1',title:metadata.title||entry.name,description:metadata.description||entry.description||base.description,questions,dimensions,scoring,source:filename};
+ const {publishedAt:_publishedAt,publishedBy:_publishedBy,...draftMetadata}=metadata;
+ return {...base,...draftMetadata,id:base.id,stableId:undefined,publishedAt:undefined,publishedBy:undefined,status:'Borrador',version:'1',title:metadata.title||entry.name,description:metadata.description||entry.description||base.description,questions,dimensions,scoring,source:filename};
 }

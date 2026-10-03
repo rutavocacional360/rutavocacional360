@@ -1,12 +1,11 @@
-import { careerFields } from "@/components/kit/lib/content-fields";
-import {
-  careerGuidance,
-  environmentRules,
-  GUIDANCE_VERSION,
-} from "@/components/kit/lib/career-guidance";
+import { ensureGuidance } from './guidance';
+import { studentEducationLevel,submissionRoutes } from './assessment-route';
+import { requireCompletedAssessments } from './assessment-readiness';
+import { GUIDANCE_RULES_VERSION } from '@/components/kit/lib/local-guidance';
+import { answerText } from '@/components/kit/lib/test-answer-text';
+import { visibleQuestions } from '@/components/kit/lib/test-engine';
 import { randomUUID } from "node:crypto";
 import { db, document, fail, hash, resultIsReleased } from "./store";
-import { careers } from "@/components/kit/data/careers";
 import { dimensions } from "@/components/kit/data/instruments";
 import { stations } from "@/components/kit/data/course";
 import { versionLabel } from "@/components/kit/lib/version";
@@ -16,7 +15,7 @@ import type {
 } from "@/components/kit/lib/integral-report";
 import { asyncSome } from "@/lib/server/async-collections";
 
-const ENGINE = GUIDANCE_VERSION;
+const ENGINE = 'route-integral-'+GUIDANCE_RULES_VERSION;
 const areaName = (code: string) =>
   dimensions.find((d) => d.code === code)?.name || code;
 function ensureTables() {}
@@ -55,6 +54,7 @@ export async function listIntegralReports(
       student: r.student,
       engineVersion: r.engineVersion,
       shared: r.shared,
+      educationLevel:r.educationLevel,
     };
   });
 }
@@ -108,6 +108,13 @@ export async function createIntegralReport(
     new Set(attempts.map((row) => row.instrument_id)).size !== attempts.length
   )
     fail("Selecciona un solo intento por instrumento.");
+  const educationLevel=await studentEducationLevel(user),school=educationLevel==='bachillerato';
+  const routeOf=await submissionRoutes(user,educationLevel);
+  if(attempts.some(row=>routeOf(row)!==educationLevel))fail('Selecciona solo resultados de tu ruta educativa actual.',409);
+  await requireCompletedAssessments(user,educationLevel);
+  const guidance=await ensureGuidance(user);
+  const selected=new Set(attempts.map(row=>row.id));
+  if(guidance.instruments.some((item:any)=>!selected.has(item.id))||attempts.some(row=>!guidance.instruments.some((item:any)=>item.id===row.id)))fail('Incluye los resultados actuales de todos los tests de esta ruta para generar el informe integral.',409);
   const order: Record<string, number> = {
     intereses: 0,
     valores: 1,
@@ -130,6 +137,7 @@ export async function createIntegralReport(
       {
         title: "Estado de mi ruta",
         lines: [
+          "Ruta: "+(school?"Bachillerato":"Universidad"),
           "Esta copia incluye " + attempts.length + " instrumentos entregados.",
           ...(await Promise.all(
             (
@@ -158,9 +166,10 @@ export async function createIntegralReport(
     ],
     pref: Record<string, string> = {};
   for (const a of attempts) {
-    const instrument = JSON.parse(a.snapshot),
-      scores = JSON.parse(a.scores),
-      answers = JSON.parse(a.answers);
+    const current=guidance.instruments.find((item:any)=>item.id===a.id);
+    const instrument = current.instrument,
+      scores = current.scores,
+      answers = current.answers;
     const lines = [
       `Estado: entregado · ${instrument.questions.length} preguntas.`,
       `Intento: ${a.id.slice(0, 8)} · Versión: ${versionLabel(a.version)} · Entrega: ${new Date(a.created_at).toLocaleString("es-EC", { timeZone: timezone })} (${timezone})`,
@@ -175,80 +184,30 @@ export async function createIntegralReport(
       );
       scores.forEach((s: any) =>
         lines.push(
-          `${areaName(s.dimension)}: suma ${s.raw}, promedio ${Number(s.value).toFixed(2)}${s.percent !== undefined ? `, índice ${s.percent} / 100` : ""}${s.band ? `, ${s.band}` : ""}.`,
+          `${areaName(s.dimension)}: ${(instrument.aggregation||(instrument.schemaVersion===2?'sum':'mean'))==='sum'?'suma '+s.raw:'promedio ponderado '+Number(s.value).toFixed(2)}${s.percent !== undefined ? `, índice ${s.percent} / 100` : ""}${s.band ? `, ${s.band}` : ""}.`,
         ),
       );
     }
-    for (const q of instrument.questions) {
+    for (const q of visibleQuestions(instrument,answers).filter(q=>q.type!=='info')) {
       const value = answers[q.id];
-      const text =
-        q.type === "open"
-          ? String(value)
-          : (q.options || instrument.options)
-              .filter((o: any) =>
-                Array.isArray(value)
-                  ? value.includes(o.value)
-                  : value === o.value,
-              )
-              .map((o: any) => o.label)
-              .join(", ");
+      const text = answerText(instrument,q,value);
       if (a.instrument_id === "valores") pref[q.id] = text;
       lines.push(`${q.text} — ${text}`);
     }
     sections.push({ title: instrument.title, lines });
   }
-  const interest = attempts.find((a) => a.instrument_id === "intereses");
-  const sorted = interest
-    ? JSON.parse(interest.scores).sort((a: any, b: any) => b.value - a.value)
-    : [];
-  const threshold = sorted[1]?.value || 0;
-  const top = sorted
-    .filter((s: any) => s.value >= threshold)
-    .map((s: any) => s.dimension);
-  const environments = environmentRules;
-  const catalog = structuredClone(careers);
-  for (const row of await document(
-    "institution:" + user.institutionId,
-    "rv360:published-content",
-    [],
-  )) {
-    const item = JSON.parse(row.content);
-    if (item.kind !== "Carrera") continue;
-    const found = catalog.find((c) => c.id === item.id);
-    const next = careerFields(item, found);
-    if (found) Object.assign(found, next);
-    else catalog.push(next);
-  }
-  const related = careerGuidance(catalog, sorted, pref).candidates;
-  const recommendationLines = [
-    `Reglas: ${ENGINE}. Se incluyen todas las carreras con alguna etiqueta entre los dos intereses superiores, manteniendo empates. Se ordenan por número de etiquetas coincidentes y, en empate, por relación con el ambiente preferido. Igualdad restante: orden del catálogo.`,
-    "La relación entre ambientes y áreas es una regla editorial orientativa, no una medida de aptitud ni una probabilidad de éxito. Valores y motivaciones añaden preguntas de contraste; no alteran la puntuación.",
-    `Mapa de ambientes: ${Object.entries(environments)
-      .map(([key, codes]) => key + " → " + codes.map(areaName).join(", "))
-      .join("; ")}.`,
-  ];
-  if (!interest)
-    recommendationLines.push(
-      "Pendiente: entrega Intereses para obtener sugerencias relacionadas.",
-    );
-  related.forEach(({ career: c, matches, environment }) => {
-    recommendationLines.push(
-      `${c.name}: comparte ${matches.map(areaName).join(", ")}.${environment.length ? ` Tu ambiente «${pref.ambiente}» añade una relación con ${environment.map(areaName).join(", ")}.` : ""}`,
-      c.investigate,
-    );
-    if (pref.motivacion)
-      recommendationLines.push(
-        `Contrasta «${pref.motivacion}»: ¿qué actividades de ${c.name} permitirían desarrollar esa motivación?`,
-      );
-    if (pref.valor)
-      recommendationLines.push(
-        `Contrasta «${pref.valor}»: ¿qué condiciones de estudio y trabajo necesitarías para respetar este valor?`,
-      );
-  });
-  sections.push({
-    title: "Carreras sugeridas y razones",
-    lines: recommendationLines,
-  });
+  sections.push({title:school?'Orientación de Bachillerato':'Orientación de Universidad',lines:[
+    guidance.analysis.summary,
+    guidance.ai?.status==='available'?'Análisis de resultados asistido por IA. Modelo: '+guidance.model:'Orientación calculada a partir de los resultados guardados.',
+    ...(guidance.ai?.error?.message?[guidance.ai.error.message]:[]),
+  ]});
+  if(school){
+    const pathway=guidance.analysis.pathway;
+    sections.push({title:'Modalidad de Bachillerato recomendada',lines:[pathway.title,pathway.reason]});
+    for(const group of [{title:'Ciencias: áreas para explorar',options:pathway.science},{title:'Técnico: figuras profesionales para explorar',options:pathway.technical}])sections.push({title:group.title,lines:group.options.length?group.options.flatMap((option:any)=>[option.name,option.reason,'Asignaturas: '+option.subjects,'Actividad: '+option.activity,'Evidencia: '+option.evidence.join(', ')]):['Sin opciones priorizadas; compara las modalidades con tu orientador.']});
+  }else sections.push({title:'Carreras universitarias relacionadas con tus resultados',lines:guidance.analysis.recommendations.length?guidance.analysis.recommendations.flatMap((option:any)=>[guidance.catalog.find((c:any)=>c.id===option.careerId)?.name||option.careerId,option.reason,'Qué explorar: '+option.explore,'Evidencia: '+option.evidence.join(', ')]):['Los resultados todavía no permiten priorizar una carrera. Contrasta tus intereses con experiencias y orientación docente.']});
+  sections.push({title:'Recomendaciones para avanzar',lines:guidance.analysis.nextSteps});
+  sections.push({title:'Fuentes de esta ruta',lines:[guidance.catalogSource.source,guidance.catalogSource.sourceUrl,'Consulta: '+guidance.catalogSource.date,'Reglas: '+guidance.rulesVersion]});
   const notes = await document(user.id, "rv360:course-notes", {}),
     done = await document(user.id, "rv360:course-done", []);
   sections.push({
@@ -332,7 +291,7 @@ export async function createIntegralReport(
             `${t.done ? "Completado" : "Pendiente"}: ${t.title}${t.date ? " · Fecha: " + t.date : ""}`,
         )
       : [
-          "Aún no hay acciones registradas. Elige dos carreras, compara sus planes de estudio y conversa con una persona del área.",
+          school?'Compara dos opciones de Bachillerato, sus asignaturas y actividades; conversa con tu orientador.':'Compara dos carreras universitarias, sus planes de estudio y conversa con una persona del área.',
         ],
   });
   sections.push({
@@ -340,12 +299,13 @@ export async function createIntegralReport(
     lines: [
       "Copia fechada de las entregas seleccionadas y del contexto personal disponible al generarla. Las ediciones posteriores no cambian esta copia.",
       "Intereses y preferencias orientan la exploración. Laboratorio, autoconocimiento, curso y reflexiones aportan contexto; no se mezclan en una puntuación de aptitud.",
-      "El catálogo no es exhaustivo. Investiga también otras opciones y verifica requisitos oficiales. No se asigna una carrera definitiva ni se afirma validación psicológica.",
+      ...guidance.analysis.limitations,
     ],
   });
   const payload = {
     student: { id: user.id, name: user.name },
     engineVersion: ENGINE,
+    educationLevel,
     shared: shared && !!user.institutionId,
     attemptIds: attempts.map((a) => a.id),
     sections,

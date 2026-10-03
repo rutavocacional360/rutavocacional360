@@ -7,10 +7,14 @@ import { asyncFind, asyncFilter } from "@/lib/server/async-collections";
 import {studentEducationLevel,testMatchesLevel,routeTest} from './assessment-route';
 
 export async function availableOriginals(user: any) {
+  const level = await studentEducationLevel(user);
   const owner = "institution:" + user.institutionId;
   const statuses = await document(owner, "rv360:admin-original-status", {});
   const custom = await asyncFilter(await document(owner, "rv360:custom-tests", []), async (t: any) => await assigned(t, user));
-  return instruments.filter(t => (!statuses[t.id] || statuses[t.id] === "Original") && !custom.some((c: any) => c.stableId === t.id));
+  return instruments.filter(t => {
+    const status = statuses[level + ':' + t.id] ?? statuses[t.id] ?? 'Original';
+    return testMatchesLevel(t, level) && status === 'Original' && !custom.some((c: any) => c.stableId === t.id && c.educationLevel === level);
+  });
 }
 
 export async function currentAssessments(user: any) {

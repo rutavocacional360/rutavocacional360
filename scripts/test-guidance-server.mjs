@@ -151,6 +151,8 @@ try{
    const {runValidationHttp}=await import('./test-validation-http.mjs');
    await runValidationHttp({request,cookie,adminCookie,password,db});
    console.log('PASS HTTP: student/admin login, persisted profile, invalid values rejected, current report ordering and authorized admin regeneration.');
+   const {runAssessmentImportHttp}=await import('./test-assessment-import-http.mjs');
+   await runAssessmentImportHttp({base,adminCookie,studentCookie:cookie});
    const {runSchoolTrainingHttp}=await import('./test-school-training-http.mjs');
    await runSchoolTrainingHttp({base,password,adminCookie,schoolOrientationTemplate,schoolPracticeTemplate});
    if(process.argv.includes('--visual')){

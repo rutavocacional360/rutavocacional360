@@ -48,10 +48,11 @@ export async function ensureGuidance(user:any,_regenerate=false) {
     } catch { row.evaluation={state:'insufficient',scores:[],careers:[]}; }
   }
   const profile=await document(user.id,'rv360:profile',{}),content=readAcademic();
+  const mappingVersion=educationLevel==='bachillerato'?pathwayVersion:ACADEMIC_VERSION;
   const digest=hash(JSON.stringify({
     educationLevel, aiConfig:studentAIConfigSignature(), attempts:rows.map(r=>({id:r.id,evaluation:r.evaluation})),readiness,
     assigned:run.instruments.map((t:any)=>t.id), profile, name:user.name,
-    catalog:catalogSource.version,content:content.id,rulesVersion:GUIDANCE_RULES_VERSION,mapping:pathwayVersion,
+    catalog:catalogSource.version,content:content.id,rulesVersion:GUIDANCE_RULES_VERSION,mapping:mappingVersion,
   }));
   const prior=await db.prepare('SELECT * FROM guidance_reports WHERE user_id=? AND digest=? ORDER BY version DESC LIMIT 1').get(user.id,digest);
   if(prior){const saved=asReport(prior);if(saved.ai?.status!=='error'||Date.parse(saved.ai.retryAt)>Date.now())return saved;}
@@ -64,6 +65,7 @@ export async function ensureGuidance(user:any,_regenerate=false) {
     educationLevel,profile,content:{...content,areas},catalog:catalog as any,
   });
   if(!report)fail('No hay resultados publicados para generar orientación.',409);
+  report.mappingVersion=mappingVersion;
   const routeReadiness=readiness[educationLevel];
   report.partial=!routeReadiness.ready;
   report.progress={submitted:routeReadiness.completed,total:routeReadiness.total};

@@ -2,17 +2,19 @@ import { readJsonObject, readBoundedBody } from "@/lib/server/request-body";
 import { trustedMutationOrigin } from "@/lib/server/request-origin";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   requireUser,
+  db,
   fail,
   hash,
   document,
   put,
   rateLimit,
 } from "@/lib/server/store";
-import { startJob, cancelJob, importFolder } from "@/lib/server/import-jobs";
+import { startJob, cancelJob, assignJob, importFolder } from "@/lib/server/import-jobs";
+import { assessmentImportLevel } from "@/lib/server/assessment-import";
 export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +24,8 @@ export async function POST(req: NextRequest) {
     if (req.headers.get("content-type")?.includes("application/json")) {
       const body = await readJsonObject(req, 10000);
       if (body.action === "cancel") await cancelJob(owner, body.id);
-      else if (body.action === "retry") await startJob(owner, body.id);
+      else if (body.action === "retry") await startJob(owner, body.id, body.educationLevel);
+      else if (body.action === "assign") await assignJob(owner, body.id, body.educationLevel);
       else fail("Operación no válida.");
       return NextResponse.json({ ok: true });
     }
@@ -32,6 +35,7 @@ export async function POST(req: NextRequest) {
     const bytesBody = await readBoundedBody(req, 11000000);
     const form = await new Response(new Uint8Array(bytesBody), {headers:{"Content-Type": req.headers.get("content-type") || ""}}).formData(),
       file = form.get("file");
+    const educationLevel = assessmentImportLevel(form.get("educationLevel"));
     if (!(file instanceof File) || file.size > 10000000 || file.size < 5)
       fail("Selecciona un archivo de hasta 10 MB.");
     if (!/\.(pdf|docx|html?|htm)$/i.test(file.name))
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
     const bytes = Buffer.from(await file.arrayBuffer()),
       digest = hash(bytes.toString("base64"));
     const previous = await document(owner, "rv360:imports", []);
-    if (previous.some((f: any) => f.hash === digest))
+    if (previous.some((f: any) => f.hash === digest && f.educationLevel === educationLevel))
       fail(
         "Este documento ya fue importado. Revisa su estado en el historial de importaciones.",
       );
@@ -47,25 +51,22 @@ export async function POST(req: NextRequest) {
       folder = importFolder();
     await mkdir(folder, { recursive: true });
     await writeFile(resolve(folder, id), bytes, { flag: "wx" });
-    const current = await document(owner, "rv360:imports", []);
-    if (current.some((f: any) => f.hash === digest))
-      fail(
-        "Este documento ya fue importado. Revisa su estado en el historial de importaciones.",
-      );
-    await put(owner, "rv360:imports", [
-      ...current,
-      {
-        id,
-        name: file.name.slice(0, 180),
-        hash: digest,
-        author: user.name,
-        created_at: new Date().toISOString(),
-        status: "Pendiente",
-        progress: 0,
-      },
-    ]);
+    try {
+      await db.transaction(async () => {
+        const current = await document(owner, "rv360:imports", []);
+        if (current.some((f: any) => f.hash === digest && f.educationLevel === educationLevel))
+          fail("Este documento ya fue importado. Revisa su estado en el historial de importaciones.");
+        await put(owner, "rv360:imports", [...current, {
+          id, name:file.name.slice(0, 180), hash:digest, educationLevel,
+          author:user.name, created_at:new Date().toISOString(), status:"Pendiente", progress:0,
+        }]);
+      });
+    } catch (error) {
+      await unlink(resolve(folder, id)).catch(() => {});
+      throw error;
+    }
     await startJob(owner, id);
-    return NextResponse.json({ id, status: "Procesando" }, { status: 202 });
+    return NextResponse.json({ id, status: "Procesando", educationLevel }, { status: 202 });
   } catch (e: any) {
     return NextResponse.json(
       { error: e.status ? e.message : "No se pudo iniciar la importación." },

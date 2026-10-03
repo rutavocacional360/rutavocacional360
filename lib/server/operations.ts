@@ -1,6 +1,8 @@
 import {submissionRoutes} from './assessment-route';
 import { nameProblem, emailProblem, textProblem, settingsProblem, studentDocumentProblem } from "../validation";
 import { ecuadorCareers, careerOffers, catalogSource } from "./ecuador-catalog";
+import {schoolTrainingTargets} from '@/components/kit/data/school-training';
+import {schoolCatalogSource} from '@/components/kit/data/baccalaureate';
 import { calculateTest } from "@/components/kit/lib/test-engine";
 import { validateDraft, instrumentFor, battery } from "./battery";
 import { contentProblem } from "@/components/kit/lib/content-fields";
@@ -93,9 +95,13 @@ async function saveDocumentInner(
   }
   if (key === "rv360:admin-original-status") {
     if (!Number.isInteger(revision)) fail("Recarga el catálogo antes de guardar.", 409);
+    const previous = await document(owner, key, {});
+    const originalKey = (id: string) => instruments.some(t => t.id === id) || /^(bachillerato|universidad):/.test(id) && instruments.some(t => t.id === id.slice(id.indexOf(':') + 1));
     if (!value || Array.isArray(value) || typeof value !== "object" ||
-        Object.entries(value).some(([id, status]) => !instruments.some(t => t.id === id) || !["Original", "Archivado", "Eliminado"].includes(String(status))))
+        Object.entries(value).some(([id, status]) => !originalKey(id) || !["Original", "Archivado", "Eliminado"].includes(String(status))))
       fail("Revisa el estado de los tests originales.");
+    if (Object.entries(value).some(([id, status]) => !id.includes(':') && previous[id] !== status) || Object.entries(previous).some(([id, status]) => !id.includes(':') && value[id] !== status))
+      fail('Selecciona Bachillerato o Universidad para cambiar el estado de un test original.');
   }
   if (key === "rv360:custom-tests") {
     if (!Number.isInteger(revision))
@@ -116,6 +122,18 @@ async function saveDocumentInner(
       fail("Archiva las versiones publicadas; no se pueden eliminar.");
     for (const t of value) {
       validateTest(t);
+      const prior = previous.find((p: any) => p.id === t.id);
+      if (!prior && !['bachillerato', 'universidad'].includes(t.educationLevel))
+        fail('Selecciona Bachillerato o Universidad para crear un test; las rutas se guardan por separado.');
+      if (prior && ['bachillerato', 'universidad'].includes(prior.educationLevel) && t.educationLevel !== prior.educationLevel)
+        fail('La ruta de un test guardado es inmutable. Crea una copia en Bachillerato o Universidad.');
+      if (t.stableId !== undefined && (typeof t.stableId !== 'string' || !t.stableId.trim() || t.stableId.length > 120))
+        fail('Revisa el identificador de la familia del test.');
+      const linksChanged = !prior || t.educationLevel !== prior.educationLevel || JSON.stringify(t.careerLinks || []) !== JSON.stringify(prior.careerLinks || []) || t.status === 'Publicado' && prior.status !== 'Publicado';
+      if (linksChanged && t.careerLinks !== undefined && !Array.isArray(t.careerLinks))
+        fail('Revisa la lista de opciones relacionadas del test.');
+      if (linksChanged && (t.educationLevel === 'bachillerato' || t.educationLevel === 'universidad') && t.careerLinks?.some((link: any) => t.educationLevel === 'bachillerato' ? !schoolTrainingTargets.some(target => target.id === link.careerId) : !ecuadorCareers.some(career => career.id === link.careerId)))
+        fail('Las opciones relacionadas deben pertenecer al catálogo de la ruta del test.');
       if (
         t.studentIds &&
         (!Array.isArray(t.studentIds) ||
@@ -140,7 +158,6 @@ async function saveDocumentInner(
           .get(t.studentId, user.institutionId))
       )
         fail("El estudiante seleccionado no está disponible.");
-      const prior = previous.find((p: any) => p.id === t.id);
       if (prior?.publishedAt && t.status === "Borrador")
         fail(
           "Una publicación no puede volver a borrador. Crea una nueva versión.",
@@ -162,11 +179,16 @@ async function saveDocumentInner(
         t.publishedAt = prior.publishedAt;
         t.publishedBy = prior.publishedBy;
       }
-      if (t.status === "Publicado" && !t.publishedAt) {
+      if (t.status === "Publicado" && !t.publishedAt && prior?.status !== 'Publicado') {
         t.publishedAt = new Date().toISOString();
         t.publishedBy = user.id;
         if (t.careerLinks?.length)
           t.careerLinks = t.careerLinks.map((link: any) => {
+            if (t.educationLevel === 'bachillerato') {
+              const target = schoolTrainingTargets.find(target => target.id === link.careerId);
+              if (!target) fail('Selecciona una opción de Bachillerato válida.');
+              return {...link, careerName: target.name, sourceUrl: schoolCatalogSource.sourceUrl, offers: []};
+            }
             const career = ecuadorCareers.find((c) => c.id === link.careerId);
             if (!career)
               fail("Selecciona una carrera válida del catálogo CES.");
@@ -184,6 +206,7 @@ async function saveDocumentInner(
             if (
               other.id !== t.id &&
               (other.stableId || other.id) === stableId &&
+              other.educationLevel === t.educationLevel &&
               other.status === "Publicado"
             )
               other.status = "Archivado";
