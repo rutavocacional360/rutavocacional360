@@ -32,10 +32,8 @@ variables privadas de Hostinger. La caché y el presupuesto diario se guardan en
 MySQL. `AI_GUIDANCE_DAILY_REQUEST_LIMIT` limita solicitudes nuevas (por defecto 200).
 Administración → Configuración muestra el último éxito o error real. Un fallo del
 proveedor conserva las respuestas y la orientación local; los detalles técnicos
-quedan en administración. «Probar orientación de estudiantes» comprueba ambas
-rutas con ejemplos ficticios y la misma validación de los informes. No modifica
-estudiantes ni reemplaza el registro de sus análisis. Reutiliza la comprobación
-durante cinco minutos, con un máximo compartido de veinte solicitudes diarias.
+quedan en administración. Las pruebas con ejemplos ficticios se ejecutan
+únicamente desde los scripts internos, fuera de la interfaz de producción.
 `npm run test:ai:live` también comprueba ambas rutas y los asistentes administrativos
 con la clave privada del entorno. Los rechazos del formato se distinguen de los
 errores de credenciales; los errores temporales del proveedor se reintentan una vez.

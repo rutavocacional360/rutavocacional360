@@ -1,3 +1,4 @@
+import {diagnosticReport} from './ai-fixtures.mjs';
 // Opt-in check: sends synthetic educational examples, never student records.
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
@@ -13,12 +14,12 @@ if(!process.env.GEMINI_API_KEY?.trim()||process.env.GEMINI_API_KEY==='REEMPLAZAR
 }
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','ai-live-')),outfile=resolve(folder,'check.cjs');
-await build({stdin:{contents:`export {suggestStudyOptions,suggestSimulatorFields} from './lib/server/simulator-autofill';export {schoolTrainingTargets} from './components/kit/data/school-training';export {analyzeStudentGuidance} from './lib/server/student-guidance-ai';export {diagnosticReport} from './lib/server/ai-diagnostics';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
+await build({stdin:{contents:`export {suggestStudyOptions,suggestSimulatorFields} from './lib/server/simulator-autofill';export {schoolTrainingTargets} from './components/kit/data/school-training';export {analyzeStudentGuidance} from './lib/server/student-guidance-ai';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
  plugins:[{name:'server-marker',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
 const require=createRequire(import.meta.url),api=require(outfile),catalog=require('../lib/server/data/ecuador-offer.json');
 try{
  for(const educationLevel of ['bachillerato','universidad']){
-  const result=await api.analyzeStudentGuidance(api.diagnosticReport(educationLevel),{educationLevel,ready:true,cache:{read:async()=>null,write:async()=>{}}});
+  const result=await api.analyzeStudentGuidance(diagnosticReport(educationLevel),{educationLevel,ready:true,cache:{read:async()=>null,write:async()=>{}}});
   assert.equal(result.status,'available','Orientación '+educationLevel+': '+(result.error?.message||result.status));
   console.log('PASS IA real: orientación validada de '+educationLevel+'.');
  }

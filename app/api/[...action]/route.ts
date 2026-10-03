@@ -22,7 +22,6 @@ import { educationProfile } from "@/lib/server/education";
 import { manageUser, adminAnalytics } from "@/lib/server/admin-management";
 import { refreshAcademicContent, readAcademic } from "@/lib/server/academic-content.mjs";
 import {readStudentGuidanceAIStatus} from '@/lib/server/student-guidance-ai';
-import {checkStudentAI} from '@/lib/server/ai-diagnostics';
 import { providerReady } from "@/lib/server/ai-provider";
 import {
   updateProfile,
@@ -276,11 +275,6 @@ async function handle(
             ),
           ),
         );
-      } else if (action === 'admin/ai-check' && req.method === 'POST') {
-        await requireUser(true);
-        await rateLimit('ai-check:' + user.id);
-        if (!['bachillerato', 'universidad'].includes(body.educationLevel)) fail('Selecciona una ruta válida.');
-        result = await checkStudentAI(body.educationLevel);
       } else if (action === "admin/orientation-content" && req.method === "GET") {
         await requireUser(true);
         const content = readAcademic();

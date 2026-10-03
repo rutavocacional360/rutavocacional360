@@ -1,3 +1,4 @@
+import {diagnosticReport} from './ai-fixtures.mjs';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {mkdirSync,mkdtempSync} from 'node:fs';
@@ -9,7 +10,7 @@ const folder=mkdtempSync(resolve('.qa-tools','student-ai-'));
 process.env.DB_DRIVER='sqlite';
 process.env.DATABASE_PATH=resolve(folder,'private-cache.sqlite');
 const outfile=resolve(folder,'student-ai.cjs');
-await build({stdin:{contents:`export * from './lib/server/student-guidance-ai'; export * from './lib/server/ai-diagnostics'; export {db,document} from './lib/server/store';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
+await build({stdin:{contents:`export * from './lib/server/student-guidance-ai'; export {db,document} from './lib/server/store';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
  plugins:[{name:'server-marker',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
 const api=createRequire(import.meta.url)(outfile);
 const env={GEMINI_API_KEY:'synthetic-guidance-key',GEMINI_MODEL:'mock-model'};
@@ -119,8 +120,9 @@ try {
    return response({summary:'Tus intereses invitan a explorar estas opciones y contrastarlas con actividades concretas.',modality:input.modality||'no-aplica',reasons:[{candidateId:candidate.id,reason:'Tus intereses se relacionan con las actividades de esta opción de estudio.',evidence:candidate.evidence}],nextSteps:['Compara las asignaturas de esta opción de estudio.','Conversa con tu orientador sobre tus intereses.']});
   };
   for(const level of ['bachillerato','universidad']){
-   const check=await api.checkStudentAI(level);assert.equal(check.ok,true);assert.equal(check.educationLevel,level);
-   assert((await api.checkStudentAI(level)).reused);
+   const options={educationLevel:level,ready:true,cache:newCache()};
+   const check=await api.analyzeStudentGuidance(diagnosticReport(level),options);assert.equal(check.status,'available');assert.equal(check.educationLevel,level);
+   assert((await api.analyzeStudentGuidance(diagnosticReport(level),options)).reused);
   }
   assert.equal(diagnosticCalls,2);
   assert.deepEqual(await api.document('system','guidance-ai:status'),savedStatus,'Synthetic checks never replace actual student health status');
