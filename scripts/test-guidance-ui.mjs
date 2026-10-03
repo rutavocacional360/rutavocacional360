@@ -17,6 +17,14 @@ try{
  for(const label of ['Tu perfil muestra afinidad con Bachillerato Técnico','Bachillerato en Ciencias','Informática','Ingeniería de Software','Recomendaciones para avanzar','/mi-ruta/perfil'])assert(html.includes(label),label);
  assert(html.indexOf('TU PERFIL DE BACHILLERATO')<html.indexOf('TU PASO A LA UNIVERSIDAD'));
  assert(!html.includes('NaN'));
+ assert(html.includes('Modalidad recomendada: Bachillerato Técnico'));
+ const renderPath=(p,readiness)=>renderToStaticMarkup(React.createElement(BaccalaureateResult,{pathway:p,readiness}));
+ assert(renderPath({...pathway,suggested:'ciencias'}).includes('Modalidad recomendada: Bachillerato en Ciencias'));
+ assert(renderPath({...pathway,suggested:'ambas'}).includes('Afinidad con ambas modalidades'));
+ const pending=renderPath(pathway,{ready:false,total:3,completed:1,pending:[{id:'a',title:'Intereses pendientes',state:'not_started'},{id:'b',title:'Resultados por publicar',state:'awaiting_results'}]});
+ for(const label of ['Resultado pendiente: Técnico o Ciencias','1 de 3','Intereses pendientes','Pendiente de publicación','Continuar mis tests'])assert(pending.includes(label),label);
+ assert(!pending.includes('Modalidad recomendada:'));
+ assert(!pending.includes('TU PASO A LA UNIVERSIDAD'));
  globalThis.__guidanceTestRole='admin';
  assert(!renderToStaticMarkup(React.createElement(BaccalaureateResult,{pathway})).includes('/mi-ruta/perfil'));
  const value={province:'',canton:'',parish:'',schoolId:'',institution:'',baccalaureate:'tecnico',specialty:'Informática',learningPreference:'aplicar'};
