@@ -70,7 +70,26 @@ nuevos se generan desde Mis resultados.
 plantillas. `npm run test:guidance:visual` prueba registro, publicación administrativa,
 práctica del estudiante, notas y vistas de escritorio/móvil en una instalación aislada.
 
-## Requisitos
+## Escuelas en administración
+
+Administración → Escuelas permite crear centros con código único (AMIE o interno),
+ciudad y contacto, editar sus datos, archivarlos y reactivarlos. Desde «Ver usuarios»
+se asignan estudiantes y orientadores existentes; los filtros permiten encontrar
+usuarios sin escuela o trasladarlos desde otro centro con confirmación.
+
+Cada usuario tiene como máximo una escuela asignada. Archivar conserva asignaciones
+y resultados, impide nuevas asignaciones y no suspende cuentas. El administrador
+mantiene el control central: esta organización no concede permisos ni convierte a
+un orientador en administrador de escuela, y no modifica el colegio declarado en
+el perfil ni las evaluaciones anteriores.
+
+El directorio y las asignaciones se guardan en MySQL, separados por institución y
+fuera del contenido de sesión. Las consultas se paginan en el servidor; las ediciones
+usan revisiones para detectar cambios simultáneos. Se utiliza la tabla documental
+existente, sin modificar migraciones ya aplicadas. Las pruebas `test-schools.mjs`,
+`test-schools-ui.mjs` y la integración HTTP verifican estos límites.
+
+## Requisitos de compilación
 
 Las herramientas necesarias para compilar (esbuild, Tailwind/PostCSS y TypeScript)
 se incluyen en `dependencies`: Hostinger instala en modo producción y puede omitir

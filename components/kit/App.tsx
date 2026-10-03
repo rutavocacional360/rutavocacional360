@@ -5,6 +5,7 @@ import {GuidanceResults} from './features/student/GuidanceResults';
 import {AdminResults} from './features/admin/AdminResults';
 import {InstitutionalOverview as CompactAdmin} from './features/admin/InstitutionalOverview';
 import {Groups} from './features/admin/Groups';
+import {Schools} from './features/admin/Schools';
 import {Settings} from './features/admin/Settings';
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -124,6 +125,9 @@ export default function App({ view, navigate }: { view: View; navigate: (view: V
           break;
         case "usuarios":
           content = <Users />;
+          break;
+        case "escuelas":
+          content = <Schools />;
           break;
         case "grupos":
           content = <CompactAdmin navigate={navigate} />;

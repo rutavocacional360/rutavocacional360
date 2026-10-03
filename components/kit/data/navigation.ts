@@ -36,6 +36,7 @@ export const adminNav: NavItem[] = [
  {id:'ajustes',label:'Configuración',icon:SlidersHorizontal},
  {id:'editor',label:'Tests',icon:FilePenLine},
  {id:'usuarios',label:'Estudiantes',icon:Users},
+ {id:'escuelas',label:'Escuelas',icon:School},
  {id:'admin-resultados',label:'Resultados',icon:ChartNoAxesCombined},
 ];
 export const views: NavItem[] = [

@@ -1,4 +1,5 @@
 import {completeAssessment} from './assessment-fixtures.mjs';
+import {testSchoolsHttp} from './test-schools-http.mjs';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -126,6 +127,7 @@ try{
    const unchanged=await (await request('session',null,cookie)).json();assert.equal(unchanged.values['rv360:profile'].specialty,'Informática','Invalid updates cannot alter persisted profile');
    const adminLogin=await request('auth/login',{email:'admin@example.test',password,admin:true});assert.equal(adminLogin.status,200);
    const adminCookie=adminLogin.headers.get('set-cookie').split(';')[0];
+   await testSchoolsHttp({request,adminCookie,cookie,userId:user.id,base});
    // MySQL production bootstrap requires a configured key. Never call a real provider
    // from integration tests; missing credentials are exercised by the SQLite run.
    const aiStatus=await request('admin/orientation-content',null,adminCookie);assert.equal(aiStatus.status,200);assert.equal((await aiStatus.json()).configured,db.driver==='mysql');

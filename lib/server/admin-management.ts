@@ -86,6 +86,7 @@ export async function manageUser(admin: any, body: any) {
           .prepare("DELETE FROM " + table + " WHERE userId=?")
           .run(existing.id);
       await db.prepare("DELETE FROM documents WHERE owner=?").run(existing.id);
+      await db.prepare("DELETE FROM documents WHERE owner=? AND key=?").run('school-members:'+admin.institutionId,existing.id);
       await db.prepare("DELETE FROM users WHERE id=?").run(existing.id);
       await db.exec("COMMIT");
     } catch (e) {

@@ -28,6 +28,7 @@ export type View =
   | "mi-perfil"
   | "admin"
   | "usuarios"
+  | "escuelas"
   | "grupos"
   | "editor"
   | "contenidos"

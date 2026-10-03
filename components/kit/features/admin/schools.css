@@ -1,0 +1,9 @@
+.school-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,240px) auto;gap:16px;align-items:end}
+.school-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:20px}
+.school-card{min-width:0;overflow-wrap:anywhere}
+.school-card h2,.school-member h2{font-size:1.1rem;margin:0}
+.school-member,.school-pagination{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.school-member>div{min-width:0;overflow-wrap:anywhere;flex:1 1 240px}
+.school-fieldset{border:0;padding:0;margin:0;min-width:0}
+.school-directory h1{overflow-wrap:anywhere}
+@media(max-width:640px){.school-filters{grid-template-columns:1fr}.school-member>button{width:100%}.school-pagination{align-items:flex-start}}

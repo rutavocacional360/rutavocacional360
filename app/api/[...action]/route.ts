@@ -69,6 +69,7 @@ import {
   evaluateInstrument,
 } from "@/lib/server/operations";
 import { renameGroup } from "@/lib/server/groups";
+import { schoolAction } from "@/lib/server/schools";
 import {
   createIntegralReport,
   listIntegralReports,
@@ -253,6 +254,8 @@ async function handle(
           body,
           req.nextUrl.searchParams,
         );
+      else if (action === 'admin/schools' || action.startsWith('admin/schools/'))
+        result = await schoolAction(user, action, req.method, body, req.nextUrl.searchParams);
       else if (action === "admin/users" && req.method === "POST")
         result = await manageUser(user, body);
       else if (action === "admin/analytics" && req.method === "GET")

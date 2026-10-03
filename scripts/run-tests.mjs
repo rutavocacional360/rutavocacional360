@@ -20,6 +20,8 @@ const tests = [
   'test-school-guidance.cjs', 'test-guidance-ui.mjs',
   'test-admin-session-renewal.cjs', 'test-guidance-server.mjs',
   'test-session-races.cjs',
+  'test-schools.mjs',
+  'test-schools-ui.mjs',
 ];
 let failures = 0;
 for (const test of tests) {
