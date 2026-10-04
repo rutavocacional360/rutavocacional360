@@ -30,6 +30,7 @@ import type {
   Simulator,
   AdmissionProfile,
   TrainingGoal,
+  TrainingMode,
 } from "@/components/kit/lib/training-types";
 import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
@@ -484,6 +485,18 @@ async function progress(e: any) {
         )
         .all(e.id)) as any[]
     ).map((x) => x.activity_id);
+  // An enrollment keeps its original simulator version even after the catalog
+  // publishes a replacement. Expose only modes, never that version's questions.
+  const activityModes: Record<string, TrainingMode[]> = {};
+  for (const activity of course.activities.filter(activity => activity.kind === 'simulator')) {
+    const linked = await db.prepare(
+      "SELECT t.content FROM training_entities t JOIN users u ON u.institutionId=t.org WHERE t.kind='simulator' AND t.id=? AND t.version=? AND u.id=?",
+    ).get(activity.simulatorId, activity.simulatorVersion, e.user_id) as any;
+    const modes = linked ? JSON.parse(linked.content).modes : [];
+    activityModes[activity.id] = Array.isArray(modes)
+      ? [...new Set(modes.filter((mode: any): mode is TrainingMode => mode === 'practice' || mode === 'exam'))] as TrainingMode[]
+      : [];
+  }
   const attempts = (await db
     .prepare(
       "SELECT * FROM training_attempts WHERE enrollment_id=? AND state='graded' ORDER BY started_at,id",
@@ -518,6 +531,7 @@ async function progress(e: any) {
     origin: JSON.parse(e.origin),
     progress: courseProgress(course.activities, done),
     completed: done,
+    activityModes,
     next:
       course.activities.find((a) => a.required && !done.includes(a.id)) || null,
     grades,
@@ -538,7 +552,13 @@ async function recommendations(u: User) {
   return recs.filter((r: any, i: number) => recs.findIndex((x: any) => x.careerId === r.careerId) === i);
 }
 function matchesRecommendations(course: Course, recs: any[]) {
-  return recs.some(r => trainingTargetMatches(course.careerIds,r.careerId)) ||
+  // An explicitly classified general course addresses the whole route. The
+  // caller still checks route readiness, dates and the selected recipients.
+  // Historical unclassified courses and specialised courses keep their targets.
+  const generalRoute = course.type === 'general' &&
+    ['bachillerato', 'universidad'].includes(course.educationLevel || '') &&
+    course.careerIds.length === 0 && course.fields.length === 0;
+  return generalRoute || recs.some(r => trainingTargetMatches(course.careerIds,r.careerId)) ||
     trainingCatalog().careers.some(c => course.fields.includes(c.area) && recs.some(r => r.careerId === c.id));
 }
 export async function trainingState(u: User) {
@@ -1368,10 +1388,12 @@ export async function trainingAction(
   if (path === "training/read" && method === "POST") {
     student(u);
     const e = await enrollment(u, b.enrollmentId),
-      a = (JSON.parse(e.snapshot) as Course).activities.find(
+      course = JSON.parse(e.snapshot) as Course,
+      a = course.activities.find(
         (a) => a.id === b.activityId,
       );
     if (!a || a.kind === "simulator") fail("Actividad no válida.");
+    await requireCompletedAssessments(u, preparationLevel(course.careerIds, course.educationLevel));
     await completeActivity(e.id, a.id, { kind: "confirmed-reading" });
     return await progress(e);
   }

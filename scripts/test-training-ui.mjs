@@ -5,32 +5,38 @@ import {mkdirSync,mkdtempSync} from 'node:fs';
 import {resolve} from 'node:path';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {parseHTML} from 'linkedom';
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','training-ui-')),outfile=resolve(folder,'ui.cjs'),primitives=resolve('components/kit/components/ui/primitives.tsx').replaceAll('\\','/');
-await build({stdin:{contents:`export {StudentCourses} from './components/kit/features/training/StudentCourses';export {AdminCourses} from './components/kit/features/training/AdminCourses';export {StudyOptionSuggestions} from './components/kit/features/admin/StudyOptionSuggestions';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile,loader:{'.css':'empty'},plugins:[{name:'fixtures',setup(b){
+await build({stdin:{contents:`export {StudentCourses} from './components/kit/features/training/StudentCourses';export {StudentCoursePrograms} from './components/kit/features/training/StudentCoursePrograms';export {AdminCourses} from './components/kit/features/training/AdminCourses';export {StudyOptionSuggestions} from './components/kit/features/admin/StudyOptionSuggestions';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile,loader:{'.css':'empty'},plugins:[{name:'fixtures',setup(b){
  b.onResolve({filter:/\/lib\/session$/},()=>({path:'session',namespace:'fixture'}));
  b.onResolve({filter:/\/components\/ui\/primitives$/},()=>({path:'primitives',namespace:'fixture'}));
  b.onResolve({filter:/^next\/navigation$/},()=>({path:'navigation',namespace:'fixture'}));
  b.onResolve({filter:/^\.\/shared$/},()=>({path:'training',namespace:'fixture'}));
  b.onResolve({filter:/^\.\/SimulatorRun$/},()=>({path:'simulator',namespace:'fixture'}));
- b.onLoad({filter:/.*/,namespace:'fixture'},args=>({resolveDir:process.cwd(),contents:args.path==='primitives'?`import React from 'react';import {Button as ActualButton} from '${primitives}';export * from '${primitives}';export function Button(props){(globalThis.__trainingButtons||=[]).push(props);return React.createElement(ActualButton,props)}`:args.path==='navigation'?`export const useSearchParams=()=>new URLSearchParams(globalThis.__trainingQuery||'');export const useRouter=()=>({push(url){globalThis.__trainingNavigations.push(url)}});`:args.path==='session'?`export const previewAction=async()=>({careers:[]});export const useSession=()=>({values:{'rv360:profile':globalThis.__trainingProfile}});`:args.path==='training'?`export const useTraining=()=>({data:globalThis.__trainingFixture,error:'',busy:false,refresh(){},run(){}});export function TrainingError(){return null;}export async function trainingApi(){};export const decimal=String;export function ChoiceList(){return null;}`:`export function SimulatorRun(){return null;}export function TrainingResult(){return null;}`}));
+ b.onLoad({filter:/.*/,namespace:'fixture'},args=>({resolveDir:process.cwd(),contents:args.path==='primitives'?`import React from 'react';import {Button as ActualButton} from '${primitives}';export * from '${primitives}';export function Button(props){(globalThis.__trainingButtons||=[]).push(props);return React.createElement(ActualButton,props)}`:args.path==='navigation'?`export const useSearchParams=()=>new URLSearchParams(globalThis.__trainingQuery||'');export const useRouter=()=>({push(url){globalThis.__trainingNavigations.push(url)}});`:args.path==='session'?`export const previewAction=async()=>({careers:[]});export const useSession=()=>({values:{'rv360:profile':globalThis.__trainingProfile}});`:args.path==='training'?`export const useTraining=()=>({data:globalThis.__trainingFixture,error:'',busy:false,refresh(){},run(){}});export function TrainingError(){return null;}export async function trainingApi(...args){return globalThis.__trainingApi?.(...args)};export const decimal=String;export function ChoiceList(){return null;}`:`export function SimulatorRun(){return null;}export function TrainingResult(){return null;}`}));
 }}]});
-const {StudentCourses,AdminCourses,StudyOptionSuggestions}=createRequire(import.meta.url)(outfile);
+const {StudentCourses,StudentCoursePrograms,AdminCourses,StudyOptionSuggestions}=createRequire(import.meta.url)(outfile);
 const readiness=ready=>({ready,total:3,completed:ready?3:1,pending:ready?[]:[{id:'pending',title:'Test pendiente QA',state:'awaiting_results'}]});
+const courseFixture=(educationLevel,overrides={})=>({id:'course-'+educationLevel,educationLevel,title:'Programa '+educationLevel,description:'Lecturas y reflexiones QA',version:2,status:'published',type:'general',careerIds:[],fields:[],activities:[{id:'new-version-activity',title:'Actividad nueva',module:'Programa',kind:'text',content:'Contenido de la nueva versión',required:true,completion:'read'}],...overrides});
 try{
  for(const level of ['bachillerato','universidad']){
   globalThis.__trainingQuery='';globalThis.__trainingNavigations=[];globalThis.__trainingButtons=[];
   globalThis.__trainingProfile={stage:level==='bachillerato'?'Estoy en 10.º de EGB y pasaré a 1.º de BGU':'Me gradué del colegio'};
   globalThis.__trainingFixture={careers:[{id:'bachillerato:ciencias-exactas',name:'Opción escolar QA',area:'Ciencias',educationLevel:'bachillerato'},{id:'bachillerato:ciencias',name:'Bachillerato en Ciencias',area:'Modalidad general QA',educationLevel:'bachillerato'},{id:'bachillerato:tecnico',name:'Bachillerato Técnico',area:'Modalidad general QA',educationLevel:'bachillerato'},{id:'uni-qa',name:'Opción universitaria QA',area:'Tecnología',educationLevel:'universidad'}],recommendations:[{careerId:'bachillerato:ciencias-exactas',reason:'Evidencia QA'},{careerId:'bachillerato:ciencias',reason:'Modalidad antigua QA'},{careerId:'bachillerato:tecnico',reason:'Modalidad antigua QA'},{careerId:'uni-qa',reason:'Evidencia QA'}],attempts:[],simulators:[],readiness:{bachillerato:readiness(false),universidad:readiness(false)}};
+  globalThis.__trainingFixture.courses=['bachillerato','universidad'].map(educationLevel=>courseFixture(educationLevel));
   const locked=renderToStaticMarkup(React.createElement(StudentCourses));
   assert(locked.includes('Completa tus tests para acceder a los cursos'));assert(locked.includes('Test pendiente QA'));assert(locked.includes('/mi-ruta/evaluaciones'));
   assert(!locked.includes('Opción escolar QA')&&!locked.includes('Opción universitaria QA'),'Stale recommendations must not leak through a locked screen');
   assert(!locked.includes('Autopreparación'));
+  assert(!locked.includes('Cursos y actividades')&&!locked.includes('Programa '+level),'Reading programs share the assessment readiness gate');
   globalThis.__trainingFixture.readiness[level]=readiness(true);
   const ready=renderToStaticMarkup(React.createElement(StudentCourses));
   assert(ready.includes(level==='bachillerato'?'Opción escolar QA':'Opción universitaria QA'));assert(ready.includes('Autopreparación'));
   assert(!ready.includes('Bachillerato en Ciencias')&&!ready.includes('Bachillerato Técnico')&&!ready.includes('Modalidad general QA'),'Legacy modality data is excluded from both cards and area filters');
   assert(!ready.includes(level==='bachillerato'?'Opción universitaria QA':'Opción escolar QA'),'Unlocked route must still hide opposite-route courses');
+  assert(ready.includes('Programa '+level)&&ready.includes('Comenzar curso'),'Published reading programs are visible alongside preparation');
+  assert(!ready.includes('Programa '+(level==='bachillerato'?'universidad':'bachillerato')),'Reading programs retain their educational category');
   assert(!locked.includes('aria-label="Nivel de preparación"')&&!ready.includes('aria-label="Nivel de preparación"'),'Students cannot switch to a route inconsistent with their registered stage');
  }
  globalThis.__trainingProfile={stage:'Estoy en 10.º de EGB y pasaré a 1.º de BGU'};
@@ -40,11 +46,21 @@ try{
   {id:'unrelated',title:'Otra especialidad QA',careerIds:['bachillerato:ciencias-naturales'],version:1,modes:['practice'],durationMinutes:20,maxAttempts:3,questionCount:4},
   {id:'university',title:'Simulador universidad ajena QA',careerIds:['uni-qa'],version:1,modes:['practice'],durationMinutes:20,maxAttempts:3,questionCount:4},
  ].map(simulator=>({...simulator,instrument:{id:simulator.id,title:simulator.title,description:'Preparación QA',options:[],questions:[]}}))};
+ globalThis.__trainingFixture.courses=[
+  courseFixture('bachillerato',{id:'general-reading',title:'Programa general escolar QA'}),
+  courseFixture('bachillerato',{id:'exact-reading',title:'Programa exactas QA',careerIds:['bachillerato:ciencias-exactas']}),
+  courseFixture('bachillerato',{id:'field-reading',title:'Programa área QA',type:'field',fields:['Ciencias']}),
+  courseFixture('bachillerato',{id:'other-reading',title:'Programa especialidad ajena QA',careerIds:['bachillerato:ciencias-naturales']}),
+  courseFixture('universidad',{title:'Programa universitario ajeno QA'}),
+ ];
  globalThis.__trainingQuery='carrera=bachillerato%3Aciencias-exactas';
  const specialty=renderToStaticMarkup(React.createElement(StudentCourses));
  assert(specialty.includes('Autopreparación para Ciencias exactas y tecnología'));
  assert(specialty.includes('Preparación general de Ciencias QA')&&specialty.includes('Preparación exactas QA'));
  assert(!specialty.includes('Otra especialidad QA')&&!specialty.includes('Simulador universidad ajena QA'));
+ assert(specialty.includes('Programa general escolar QA')&&specialty.includes('Programa exactas QA')&&specialty.includes('Programa área QA'),'A selected specialty retains its general, directly linked and field programs');
+ assert(!specialty.includes('Programa especialidad ajena QA')&&!specialty.includes('Programa universitario ajeno QA'));
+ assert(specialty.includes('<strong>2</strong><p>Simuladores disponibles'),'Adding reading programs does not change simulator filtering/counts');
  assert(specialty.includes('Investigación y aplicación de tus resultados'));
  assert(specialty.includes('href="/mi-ruta/resultados"'));
  globalThis.__trainingQuery='carrera=bachillerato%3Aciencias';
@@ -79,3 +95,75 @@ const optionMarkup=renderToStaticMarkup(React.createElement(StudyOptionSuggestio
 assert(optionMarkup.includes('Opciones detectadas en el contenido'));assert(optionMarkup.includes('Detectar opciones con IA'));
 console.log('PASS admin category routes, scoped simulator lists and automatic document option suggestions.');
 for(const key of ['__trainingFixture','__trainingQuery','__trainingNavigations','__trainingButtons'])delete globalThis[key];
+
+// Mount the actual reader so continuation, saved activity IDs and escaped
+// document content are verified through its interactive controls.
+const {window}=parseHTML('<html><body><div id="course-reader-root"></div></body></html>');
+Object.assign(globalThis,{window,document:window.document,HTMLElement:window.HTMLElement,Element:window.Element,Node:window.Node,Event:window.Event,IS_REACT_ACT_ENVIRONMENT:true});
+const {createRoot}=await import('react-dom/client');
+const root=createRoot(document.getElementById('course-reader-root'));
+const hostile='<img src=x onerror="window.documentAttack=true"><script>window.documentAttack=true</script>\nReflexiona: 2 < 3 & 5 > 4.';
+const published=courseFixture('universidad',{id:'snapshot-course',title:'Programa actualizado'});
+const snapshot={...published,version:1,title:'Programa matriculado',activities:[
+ {id:'saved-one',title:'Primera lectura',module:'Unidad uno',kind:'text',content:'Lectura inicial',required:true,completion:'read'},
+ {id:'saved-two',title:'Reflexión guardada',module:'Unidad dos',kind:'text',content:hostile,required:true,completion:'read'},
+ {id:'saved-link',title:'Material externo',module:'Unidad tres',kind:'link',content:'https://example.test/material',required:true,completion:'read'},
+ {id:'saved-exam',title:'Evaluación del curso',module:'Unidad cuatro',kind:'simulator',content:'Evaluación',simulatorId:'exam-only',simulatorVersion:1,required:true,completion:'submit'},
+]};
+let saved={id:'enrollment-snapshot',course_id:published.id,snapshot,completed:['saved-one'],next:snapshot.activities[1],activityModes:{'saved-exam':['exam']}};
+let fixture={courses:[published],careers:[],enrollments:[saved],simulators:[{id:'exam-only',version:2,modes:['practice']}]};
+const requests=[];let simulatorStarted;
+globalThis.__trainingApi=async(path,body)=>{
+ requests.push({path,body});
+ if(path==='/enroll'){assert.equal(body.courseId,published.id);return saved;}
+ if(path==='/read'){
+  assert.equal(body.enrollmentId,saved.id);assert(snapshot.activities.some(a=>a.id===body.activityId),'Persist the enrolled activity ID, never the latest published replacement');
+  saved={...saved,completed:[...new Set([...saved.completed,body.activityId])]};
+  saved.next=snapshot.activities.find(a=>!saved.completed.includes(a.id))||null;
+  return saved;
+ }
+ if(path==='/start')return {id:'course-exam-attempt',mode:body.mode};
+ assert.fail('Unexpected course request '+path);
+};
+function Reader(){
+ const [data,setData]=React.useState(fixture);
+ const run=async task=>{const result=await task();fixture={...fixture,enrollments:[saved]};setData(fixture);return result;};
+ return React.createElement(StudentCoursePrograms,{data,level:'universidad',career:'',busy:false,run,onStartSimulator:attempt=>{simulatorStarted=attempt;}});
+}
+const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text);
+const click=async text=>React.act(async()=>{const target=button(text);assert(target,'Missing course control '+text);assert(!target.disabled,'Course control disabled: '+text);target.click();});
+try{
+ await React.act(async()=>root.render(React.createElement(Reader)));
+ assert(document.body.textContent.includes('1 de 4 actividades completadas'),'The course card uses the enrolled snapshot, not the one-activity new version');
+ await click('Continuar curso');
+ assert.equal(requests[0].path,'/enroll');assert(document.body.textContent.includes('Programa matriculado'));
+ assert.equal(document.querySelector('h3').textContent,'Reflexión guardada','Continuation opens the next unfinished saved activity');
+ assert.equal(document.querySelector('.training-lesson').textContent,hostile,'The complete source is displayed as plain text');
+ assert.equal(document.querySelector('.training-lesson img,.training-lesson script'),null,'Document markup must never execute as HTML');
+ assert.equal(window.documentAttack,undefined);
+ assert(!document.body.textContent.includes('Contenido de la nueva versión'));
+ await click('Marcar actividad como completada');
+ assert.deepEqual(requests.at(-1),{path:'/read',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-two'}});
+ assert(document.body.textContent.includes('2 de 4 actividades completadas'));assert(document.body.textContent.includes('Tu progreso está guardado'));
+ assert.equal(document.querySelector('progress').getAttribute('value'),'2');assert.equal(document.querySelector('progress').getAttribute('max'),'4');
+ await click('Siguiente actividad');
+ const link=document.querySelector('a');assert.equal(link.getAttribute('href'),'https://example.test/material');assert.equal(link.getAttribute('rel'),'noopener noreferrer');
+ await click('Siguiente actividad');
+ assert.equal(button('Siguiente actividad').disabled,true,'The final activity has no next action');
+ assert(!button('Marcar actividad como completada'),'Simulator activities cannot be completed as readings');
+ await click('Iniciar examen de la actividad');
+ assert.deepEqual(requests.at(-1),{path:'/start',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-exam',mode:'exam'}},'A historical exam-only simulator uses the enrolled version modes, not its newer practice-only publication');
+ assert.equal(simulatorStarted.id,'course-exam-attempt');
+ await click('Volver a mis cursos');await click('Continuar curso');
+ assert.equal(document.querySelector('h3').textContent,'Material externo','Reopening continues from the persisted next incomplete activity');
+ saved={...saved,next:snapshot.activities[3],activityModes:{'saved-exam':[]}};
+ fixture={...fixture,enrollments:[saved]};
+ await React.act(async()=>root.render(React.createElement(Reader,{key:'unavailable-simulator'})));
+ await click('Continuar curso');
+ assert(document.body.textContent.includes('El simulador de esta actividad no está disponible'));
+ assert.equal(button('Iniciar práctica de la actividad').disabled,true,'An unavailable historical simulator must not guess a mode from another version');
+ console.log('PASS course reader DOM: snapshot continuation/progress, original activity IDs, full escaped source, external link safety, navigation and exam-only course simulator.');
+}finally{
+ await React.act(async()=>root.unmount());
+ delete globalThis.__trainingApi;delete globalThis.__trainingButtons;
+}

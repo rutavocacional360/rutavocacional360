@@ -31,8 +31,9 @@ process.once('message', async ({data, name, educationLevel}) => {
       progress => { void send({progress}).catch(() => {}); });
     await send({result: {
       text: extracted.text, warnings: extracted.warnings, images: extracted.images,
+      course: extracted.course,
       educationLevel,
-      tests: proposeTests(extracted.text, extracted.embedded, name)
+      tests: (extracted.course ? [] : proposeTests(extracted.text, extracted.embedded, name))
         .map(test => ({...test, educationLevel})),
     }});
   } catch (error) {

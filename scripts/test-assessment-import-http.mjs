@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {DOCUMENT_EXTRACTION_VERSION} from '../lib/server/import-version.ts';
 
 export async function runAssessmentImportHttp({base,adminCookie,studentCookie,resetImportThrottle}) {
  const html='<h1>Test QA importado</h1><fieldset><legend>Me gusta aprender</legend><label><input type="radio">Sí</label><label><input type="radio">No</label></fieldset>';
@@ -21,6 +22,7 @@ export async function runAssessmentImportHttp({base,adminCookie,studentCookie,re
    if(result.status==='Completado')break;assert.notEqual(result.status,'Error',result.error);await new Promise(r=>setTimeout(r,50));
   }
   assert.equal(result.status,'Completado');assert.equal(result.educationLevel,educationLevel);assert(result.tests.length);assert(result.tests.every(t=>t.educationLevel===educationLevel && t.sourceId===job.id));
+  assert.equal(result.extractionVersion,DOCUMENT_EXTRACTION_VERSION,'The deployed worker result records the extraction revision');
   const reused=await upload(educationLevel,adminCookie,202,true);assert.equal(reused.id,job.id);assert.equal(reused.reused,true);assert.equal(reused.status,'Completado');
   const assign=await fetch(base+'/api/admin/import',{method:'POST',headers:{Origin:base,Cookie:adminCookie,'Content-Type':'application/json'},body:JSON.stringify({id:job.id,action:'assign',educationLevel:educationLevel==='bachillerato'?'universidad':'bachillerato'})});assert.equal(assign.status,409);
  }

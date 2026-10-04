@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {mkdirSync,mkdtempSync,writeFileSync,readdirSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,writeFileSync,readdirSync,unlinkSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createRequire} from 'node:module';
 
@@ -12,6 +12,7 @@ const outfile=resolve(folder,'server.cjs');
 await build({stdin:{contents:`export {db,put,document} from './lib/server/store';export {assignJob,startJob,cancelJob} from './lib/server/import-jobs';export * from './lib/server/assessment-import';export {POST as uploadDocument} from './app/api/admin/import/route';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,plugins:[{name:'server-only',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));b.onResolve({filter:/^@\/lib\/server\/store$/},()=>({path:'route-auth',namespace:'test-auth'}));b.onLoad({filter:/.*/,namespace:'test-auth'},()=>({contents:`export * from ${JSON.stringify(resolve('lib/server/store.ts').replaceAll('\\','/'))};export async function requireUser(){return globalThis.importTestAdmin;}`,resolveDir:process.cwd()}));}}]});
 await build({entryPoints:['scripts/import-worker.mjs'],outfile:'.runtime/import-worker.cjs',bundle:true,platform:'node',target:'node24',format:'cjs',packages:'external'});
 const {db,put,document,assignJob,startJob,cancelJob,assessmentImportLevel,scopeImportedTests,uploadDocument}=createRequire(import.meta.url)(outfile);
+const {DOCUMENT_EXTRACTION_VERSION}=await import('../lib/server/import-version.ts');
 const owner='institution:import-qa';
 globalThis.importTestAdmin={id:'import-admin',name:'Import QA',institutionId:'import-qa',role:'admin'};
 process.env.APP_URL='https://import.example.test';
@@ -53,14 +54,14 @@ try{
  // A retry or cancellation during the initial database write must not launch another worker.
  for(const cancel of [false,true]){
   const id=cancel?'race-cancel':'race-retry';writeFileSync(resolve(process.env.IMPORT_PATH,id),html);
-  await put(owner,'rv360:imports',[...await document(owner,'rv360:imports',[]),{id,name:'race.html',educationLevel:'bachillerato',status:'Pendiente'}]);
+  await put(owner,'rv360:imports',[...await document(owner,'rv360:imports',[]),{id,name:'race.html',educationLevel:'bachillerato',status:'Pendiente',course:{title:'Stale course'}}]);
   const realTransaction=db.transaction;let unblock,entered;const blocked=new Promise(resolve=>{entered=resolve;});const release=new Promise(resolve=>{unblock=resolve;});let next=true;
   db.transaction=async fn=>{if(next){next=false;entered();await release;}return realTransaction(fn);};
   try{
    const started=startJob(owner,id);await blocked;
    if(cancel)await cancelJob(owner,id);else await startJob(owner,id);
    unblock();await started;
-   if(cancel){await new Promise(r=>setTimeout(r,100));assert.equal((await document(owner,'rv360:imports')).find(j=>j.id===id).status,'Cancelado');}
+   if(cancel){await new Promise(r=>setTimeout(r,100));const cancelled=(await document(owner,'rv360:imports')).find(j=>j.id===id);assert.equal(cancelled.status,'Cancelado');assert.equal(cancelled.course,undefined,'Cancellation must clear stale course proposals');}
    else assert.equal((await completed(id)).educationLevel,'bachillerato');
   }finally{db.transaction=realTransaction;unblock();}
  }
@@ -79,7 +80,10 @@ try{
  }finally{globalThis.rutaJobs.delete('occupied-1');globalThis.rutaJobs.delete('occupied-2');}
  const resumed=await upload(capacitySource,true);assert.equal(resumed.httpStatus,202);await completed(resumed.id);
  const duplicate=await upload(capacitySource);assert.equal(duplicate.httpStatus,400,'Tests retain explicit duplicate rejection');
- const reused=await upload(capacitySource,true);assert.equal(reused.id,resumed.id);assert.equal(reused.reused,true);
+ const currentExtraction=await completed(resumed.id);
+ assert.equal(currentExtraction.extractionVersion,DOCUMENT_EXTRACTION_VERSION);
+ const reused=await upload(capacitySource,true);assert.equal(reused.id,resumed.id);assert.equal(reused.reused,true);assert.equal(reused.status,'Completado');
+ assert.deepEqual(await completed(resumed.id),currentExtraction,'Current proposals must remain cached without starting another extraction');
  const count=(await document(owner,'rv360:imports',[])).length;
  for(const status of ['Error','Cancelado']){
   await put(owner,'rv360:imports',(await document(owner,'rv360:imports',[])).map(job=>job.id===resumed.id?{...job,status,error:'Interrupted fixture'}:job));
@@ -88,6 +92,31 @@ try{
  }
  const concurrent=await Promise.all([upload(html+'<p>Concurrent reuse fixture.</p>',true),upload(html+'<p>Concurrent reuse fixture.</p>',true)]);
  assert(concurrent.every(value=>value.httpStatus===202));assert.equal(concurrent[0].id,concurrent[1].id);await completed(concurrent[0].id);
+ // Old completed proposals used to survive parser fixes forever. Reuploading
+ // must refresh the same source, even after a deployment removed its file.
+ const publishedSnapshot=JSON.stringify({id:'published-from-import',sourceId:resumed.id,status:'published',questions:metadata.questions});
+ await db.prepare('INSERT INTO training_entities VALUES(?,?,?,?,?,?,?,?)').run('published-from-import',1,'import-qa','simulator','published',1,publishedSnapshot,new Date().toISOString());
+ for(const oldVersion of [undefined,DOCUMENT_EXTRACTION_VERSION-1]){
+  await db.prepare('DELETE FROM attempts WHERE key=?').run('import:import-admin');
+  const beforeRefresh=await document(owner,'rv360:imports',[]);
+  await put(owner,'rv360:imports',beforeRefresh.map(job=>job.id===resumed.id?{...job,extractionVersion:oldVersion,text:'Obsolete extraction',course:{title:'Obsolete course',sections:[{title:'No longer a course'}]},tests:[{...metadata,title:'Obsolete extraction'}]}:job));
+  unlinkSync(resolve(process.env.IMPORT_PATH,resumed.id));
+  const jobs=globalThis.rutaJobs,originalSet=jobs.set;let workers=0;
+  jobs.set=function(id,child){if(id===resumed.id)workers++;return originalSet.call(this,id,child);};
+  try{
+   const refreshed=await Promise.all([upload(capacitySource,true),upload(capacitySource,true)]);
+   for(const value of refreshed){assert.equal(value.httpStatus,202);assert.equal(value.id,resumed.id);assert.equal(value.reused,true);assert.equal(value.educationLevel,'universidad');}
+   const result=await completed(resumed.id);
+   assert.equal(result.extractionVersion,DOCUMENT_EXTRACTION_VERSION);assert.notEqual(result.text,'Obsolete extraction');assert.notEqual(result.tests[0].title,'Obsolete extraction');
+   assert.equal(result.course,undefined,'A corrected questionnaire must not retain its former course classification when the worker omits that field');
+   assert.equal(result.tests[0].educationLevel,'universidad');assert.equal(workers,1,'Concurrent refresh uploads start exactly one extraction');
+   assert.equal(readFileSync(resolve(process.env.IMPORT_PATH,resumed.id),'utf8'),capacitySource,'The new upload restores its missing original bytes');
+   assert.equal((await document(owner,'rv360:imports',[])).length,beforeRefresh.length,'Refresh keeps one history entry');
+   assert.deepEqual((await document(owner,'rv360:imports',[])).filter(job=>job.id!==resumed.id),beforeRefresh.filter(job=>job.id!==resumed.id),'Other sources and educational categories are unchanged');
+   assert.equal((await db.prepare('SELECT content FROM training_entities WHERE id=?').get('published-from-import')).content,publishedSnapshot,'Refreshing extraction must never rewrite an already published simulator');
+  }finally{jobs.set=originalSet;}
+ }
  console.log('PASS imports: real isolated worker preserves selected route, ignores conflicting document metadata, filters linked careers, rejects reclassification and classifies legacy retries and serializes cancellation/retry races.');
  console.log('PASS upload recovery: completed sources reused explicitly, failed/cancelled sources retried, concurrent uploads deduplicated and capacity failures leave no records or files.');
+ console.log('PASS extraction revisions: legacy and stale proposals refresh once, preserve source identity/category/publication and restore missing source bytes from concurrent uploads.');
 }finally{delete globalThis.importTestAdmin;await db.close();}

@@ -34,6 +34,16 @@ try {
   await assert.rejects(saveTraining(admin,'simulator',{...blank,title:'Invalid draft',status:'draft',...patch}),/Separa|nivel debe coincidir/);
  }
  const course=await saveTraining(admin,'course',{id:'',version:0,revision:0,status:'published',title:'Curso Ciencias QA',description:'Preparación',objectives:'Practicar',level:'Inicial',type:'general',careerIds:['bachillerato:ciencias'],fields:[],institutions:[],studentIds:[],access:'all',activities:[{id:'activity',module:'QA',title:'Práctica',kind:'simulator',content:'',required:true,completion:'submit',simulatorId:simulator.id,simulatorVersion:simulator.version}]});
+ // Imported teaching programmes explicitly address a whole educational route.
+ const programmeInput={...course,id:'',version:0,revision:0,title:'Programa general Bachillerato',educationLevel:'bachillerato',careerIds:[],fields:[],activities:[1,2].map(i=>({id:'reading-'+i,module:'Autoconocimiento',title:'Reflexión '+i,kind:'text',content:'Reflexiona sobre tus intereses.',required:true,completion:'read'}))};
+ const generalCourse=await saveTraining(admin,'course',programmeInput);
+ const generalUniversityCourse=await saveTraining(admin,'course',{...programmeInput,title:'Programa general Universidad',educationLevel:'universidad'});
+ const legacyGeneralCourse=await saveTraining(admin,'course',{...programmeInput,title:'Programa histórico sin clasificación',educationLevel:undefined});
+ const fieldCourse=await saveTraining(admin,'course',{...programmeInput,title:'Curso especializado sin destinatarios',type:'field'});
+ await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run('other-student','Otra cuenta','other@example.test','unused','student','org','','Activo');
+ const restrictedCourses=[];
+ for(const patch of [{title:'Programa solo para otra cuenta',access:'selected',studentIds:['other-student']},{title:'Programa futuro',availableFrom:'2099-01-01'},{title:'Programa vencido',availableUntil:'2000-01-01'},{title:'Programa borrador',status:'draft'}])restrictedCourses.push(await saveTraining(admin,'course',{...programmeInput,...patch}));
+ const read=(enrollmentId,activityId)=>api.trainingAction(user,'training/read','POST',{enrollmentId,activityId},new URLSearchParams());
  const universityCareer=api.trainingCatalog().careers.find(c=>!c.id.startsWith('bachillerato:')).id;
  const universitySimulator=await saveTraining(admin,'simulator',{...api.schoolPracticeTemplate(blank,'ciencias'),educationLevel:'universidad',careerIds:[universityCareer],title:'Universidad separada QA'});
  await assert.rejects(saveTraining(admin,'course',{...course,id:'',version:0,revision:0,title:'Curso con simulador ajeno',activities:[{...course.activities[0],simulatorId:universitySimulator.id,simulatorVersion:universitySimulator.version}]}),/misma categoría/);
@@ -44,6 +54,8 @@ try {
   await assert.rejects(api.startDirectSimulator(user,simulator.id,'practice'),e=>e.status===409);
   await assert.rejects(api.enroll(user,course.id),e=>e.status===409);
   await assert.rejects(api.enroll(admin,course.id,user.id),e=>e.status===409,'Admin assignment cannot bypass prerequisites');
+  await assert.rejects(api.enroll(user,generalCourse.id),e=>e.status===409,'General programmes require every published route result');
+  await assert.rejects(api.enroll(admin,generalCourse.id,user.id),e=>e.status===409,'Admin assignment of a general programme preserves prerequisites');
   return state;
  };
  await assert.rejects(api.saveDocument(user,'rv360:assessment-route-origins',{forged:'universidad'},0),e=>e.status===403);
@@ -63,6 +75,16 @@ try {
  assert(ready.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length<40,'Only result-related school targets are offered');
  assert(ready.simulators.some(s=>s.id===simulator.id));
  assert(ready.simulators.every(s=>s.educationLevel==='bachillerato'),'Student catalog carries the actual route explicitly');
+ assert(ready.courses.some(c=>c.id===generalCourse.id),'A route-wide teaching programme is available after completing its route');
+ for(const hidden of [generalUniversityCourse,legacyGeneralCourse,fieldCourse,...restrictedCourses])assert(!ready.courses.some(c=>c.id===hidden.id),'A general route must not broaden '+hidden.title);
+ for(const denied of [fieldCourse,...restrictedCourses])await assert.rejects(api.enroll(user,denied.id),e=>e.status===403);
+ await assert.rejects(api.enroll(user,generalUniversityCourse.id),e=>e.status===409);
+ const generalEnrollment=await api.enroll(user,generalCourse.id);
+ assert.deepEqual(generalEnrollment.activityModes,{},'Reading-only courses do not expose simulator data');
+ assert.equal((await api.enroll(admin,generalCourse.id,user.id)).id,generalEnrollment.id,'Admin assignment recovers the same valid enrollment');
+ assert.equal((await read(generalEnrollment.id,'reading-1')).progress.percent,50);
+ assert.equal((await read(generalEnrollment.id,'reading-1')).completed.length,1,'Repeated reading confirmation is idempotent');
+ await assert.rejects(read(generalEnrollment.id,'unknown'),/Actividad no válida/);
  // Inconsistent historical metadata must never override the administrator's destination.
  const inconsistent={...universitySimulator,careerIds:['bachillerato:ciencias']};
  await db.prepare('UPDATE training_entities SET content=? WHERE id=? AND version=?').run(JSON.stringify(inconsistent),inconsistent.id,inconsistent.version);
@@ -101,6 +123,19 @@ try {
  assert.equal(finishedGeneral.state,'graded');
  assert((await trainingState(user)).attempts.some(a=>a.id===started.id&&a.result),'General-scope results remain in history when modality cards are removed');
  const enrollment=await api.enroll(user,course.id);assert(enrollment.id);
+ assert.deepEqual(enrollment.activityModes.activity,simulator.modes);
+ const examOnly=await saveTraining(admin,'simulator',{...api.schoolPracticeTemplate(blank,'ciencias'),title:'Simulador solo examen v1',modes:['exam']});
+ const versionedCourse=await saveTraining(admin,'course',{...programmeInput,title:'Curso con versión de examen',activities:[{id:'versioned',module:'QA',title:'Evaluación',kind:'simulator',content:'',required:true,completion:'submit',simulatorId:examOnly.id,simulatorVersion:examOnly.version}]});
+ const versionedEnrollment=await api.enroll(user,versionedCourse.id);
+ assert.deepEqual(versionedEnrollment.activityModes,{versioned:['exam']});
+ const practiceReplacement=await saveTraining(admin,'simulator',{...examOnly,version:0,revision:0,title:'Simulador solo práctica v2',modes:['practice']});
+ assert.equal(practiceReplacement.version,2);
+ const replacedState=await trainingState(user);
+ assert.deepEqual(replacedState.simulators.find(s=>s.id===examOnly.id).modes,['practice'],'The catalog exposes the latest published version');
+ assert.deepEqual(replacedState.enrollments.find(e=>e.id===versionedEnrollment.id).activityModes,{versioned:['exam']},'An enrollment keeps the exact archived simulator version modes');
+ await assert.rejects(api.startTraining(user,versionedEnrollment.id,'versioned','practice'),/Modo no habilitado/);
+ assert.equal((await api.startTraining(user,versionedEnrollment.id,'versioned','exam')).mode,'exam');
+ assert.deepEqual((await trainingState(admin)).enrollments.find(e=>e.id===versionedEnrollment.id).activityModes,{versioned:['exam']});
  const courseAttempt=await api.startTraining(user,enrollment.id,'activity','practice');
  assert.equal(courseAttempt.simulator.educationLevel,'bachillerato');
  const courseAttemptSnapshot=(await db.prepare('SELECT snapshot FROM training_attempts WHERE id=?').get(courseAttempt.id)).snapshot;
@@ -113,8 +148,11 @@ try {
  assert.deepEqual(added.recommendations,[],'New school assignments must lock all recommendations in the current school route');
  await assert.rejects(api.startDirectSimulator(user,simulator.id,'practice'),e=>e.status===409);
  await assert.rejects(api.startTraining(user,enrollment.id,'activity','practice'),e=>e.status===409);
+ await assert.rejects(read(generalEnrollment.id,'reading-2'),e=>e.status===409,'A new route assignment also locks new reading completions');
+ assert.deepEqual((await trainingState(user)).enrollments.find(e=>e.id===generalEnrollment.id).completed,['reading-1'],'Previously completed lessons remain in history');
  const report=await api.ensureGuidance(user);assert.equal(report.analysis.pathway.suggested,'pendiente');assert.notEqual(report.id,partial.id);
  await complete(schoolTest);assert((await assessmentReadiness(user)).bachillerato.ready);
+ assert.equal((await read(generalEnrollment.id,'reading-2')).progress.percent,100,'Completing the new assignment restores reading progress');
  // A published university-only assignment cannot block the school route.
  const universityOnly={...schoolTest,id:'university-extra',educationLevel:'universidad'};
  await api.saveDocument(admin,'rv360:custom-tests',[schoolTest,universityOnly],1);
@@ -123,10 +161,17 @@ try {
  await put(user.id,'rv360:profile',{stage:'Me gradu\u00e9 del colegio',baccalaureate:'tecnico',learningPreference:'aplicar'});
  const universityLocked=await trainingState(user);assert.equal(universityLocked.educationLevel,'universidad');assert.equal(universityLocked.readiness.bachillerato.total,0);assert.equal(universityLocked.readiness.bachillerato.ready,false);assert.equal(universityLocked.readiness.universidad.completed,0);assert.equal(universityLocked.readiness.universidad.ready,false);assert.deepEqual(universityLocked.recommendations,[]);assert(universityLocked.careers.every(c=>!c.id.startsWith('bachillerato:')));
  await assert.rejects(api.startDirectSimulator(user,simulator.id,'practice'),e=>e.status===409);await assert.rejects(api.startTraining(user,enrollment.id,'activity','practice'),e=>e.status===409);
+ await assert.rejects(read(generalEnrollment.id,'reading-1'),e=>e.status===409,'A historical school enrollment cannot record readings in the university route');
  await assert.rejects(api.ensureGuidance(user),e=>e.status===409,'Graduates need new university results');
  const universityAssigned=await api.currentAssessments(user);assert(universityAssigned.some(t=>t.id===universityOnly.id));assert(!universityAssigned.some(t=>t.id===schoolTest.id));assert((await api.battery(user)).instruments.every(t=>t.educationLevel==='universidad'));
  for(const instrument of universityAssigned)await completeAssessment({db,calculateTest,userId:user.id,instrument});
  const universityReady=await trainingState(user);assert(universityReady.readiness.universidad.ready);assert.equal(universityReady.readiness.bachillerato.total,0);assert(universityReady.recommendations.length);assert(universityReady.recommendations.every(r=>!r.careerId.startsWith('bachillerato:')));assert(!universityReady.simulators.some(s=>s.id===simulator.id));assert(!universityReady.courses.some(c=>c.id===course.id));assert(universityReady.enrollments.some(e=>e.id===enrollment.id),'School enrollment history is retained after graduation');
+ assert(universityReady.courses.some(c=>c.id===generalUniversityCourse.id));
+ assert(!universityReady.courses.some(c=>c.id===generalCourse.id||c.id===legacyGeneralCourse.id),'University readiness cannot open the school route or unclassified historical content');
+ await assert.rejects(api.enroll(user,legacyGeneralCourse.id),e=>e.status===403,'An unclassified general course still requires its original recommendations');
+ await assert.rejects(api.enroll(user,generalCourse.id),e=>e.status===409);
+ const generalUniversityEnrollment=await api.enroll(user,generalUniversityCourse.id);
+ assert.equal((await read(generalUniversityEnrollment.id,'reading-1')).progress.percent,50);
  const universityReport=await api.ensureGuidance(user);assert.equal(universityReport.analysis.pathway,undefined);assert(universityReport.instruments.every(i=>i.instrument.educationLevel==='universidad'));
  await put(user.id,'rv360:profile',{stage:'Estoy eligiendo mi bachillerato',baccalaureate:'por-definir',learningPreference:'investigar'});
  // Newest withheld attempt must invalidate the earlier, published result.
@@ -135,5 +180,5 @@ try {
  await put('institution:org','rv360:custom-tests',[]);
  await put('institution:org','rv360:admin-original-status',Object.fromEntries(instruments.map(t=>[t.id,'Archivado'])));
  const empty=await locked();assert.equal(empty.readiness.bachillerato.total,0);assert.equal(empty.readiness.universidad.total,0);
- console.log('PASS readiness: no tests, drafts, partial submissions, withheld results, completed routes, level scoping, new assignments, stale reports, direct URLs and empty assignments.');
+ console.log('PASS readiness: scoped general courses and reading progress, restricted audiences, historical courses, no tests, drafts, partial submissions, withheld results, completed routes, level scoping, new assignments, stale reports, direct URLs and empty assignments.');
 } finally { await db.close(); }

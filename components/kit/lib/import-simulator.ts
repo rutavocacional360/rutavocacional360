@@ -1,11 +1,13 @@
 import {autofillSimulator} from './simulator-autofill';
-import type {Simulator} from './training-types';
+import type {Course,Simulator} from './training-types';
+import {parseInstructionalCourse} from './import-course';
 import {readApiResponse} from './api-response';
 import {suggestSimulatorCareers} from './simulator-careers';
 import {adminFetch} from './admin-session';
 import {preparationLevel} from '../data/school-training';
+export type TrainingDocumentResult = {kind:'course';course:Course;message:string}|{kind:'simulator';simulator:Simulator;message:string};
 /** One import flow for the catalog button and the simulator editor. */
-export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:string;name:string}[],onProgress?:(message:string)=>void){
+export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:string;name:string}[],onProgress?:(message:string)=>void):Promise<TrainingDocumentResult>{
  let data;
  {
    const form = new FormData();
@@ -24,9 +26,23 @@ export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:
    }
    if (data?.status !== "Completado") throw Error("La extracción sigue en proceso. Vuelve a importar el mismo documento para recuperar sus preguntas.");
  }
+ const course=courseFromDocument(data,file.name,s.educationLevel);
+ if(course)return {kind:'course',course,message:'Se detectó un programa de actividades. Se conservaron sus dinámicas, reflexiones y orientaciones como lecciones del curso, sin asignar respuestas correctas a las experiencias personales.'};
  const parsed=simulatorFromDocument(data,file.name,s,careers);
  const result=await autofillSimulator(parsed.simulator,careers,!s.questions.length&&!data.tests?.[0]?.durationMinutes,onProgress);
- return {simulator:result.simulator,message:parsed.message+' '+result.message};
+ return {kind:'simulator',simulator:result.simulator,message:parsed.message+' '+result.message};
+}
+/** Pedagogical programs retain their source content and are never sent for answer-key generation. */
+export function courseFromDocument(data:any,filename:string,educationLevel?:Course['educationLevel']):Course|null{
+ const document=data.course||(!data.tests?.length?parseInstructionalCourse(typeof data.text==='string'?data.text:''):undefined);
+ if(!document?.sections?.length)return null;
+ const sections=document.sections as {title:string;content:string;objective?:string;module?:string}[];
+ const source='Fuente: '+filename;
+ return {id:'',version:0,revision:0,status:'draft',educationLevel:educationLevel||'universidad',title:document.title||filename.replace(/\.[^.]+$/,''),
+  description:[document.description,source].filter(Boolean).join('\n\n'),objectives:sections.map(section=>section.objective).filter(Boolean).join('\n')||'Desarrollar las actividades y reflexiones descritas en el programa.',
+  level:'Introductorio',type:'general',careerIds:[],institutions:[],fields:[],studentIds:[],access:'all',
+  activities:sections.map((section,index)=>({id:crypto.randomUUID(),module:section.module||'Programa',title:section.title,kind:'text',content:[section.content,index===sections.length-1&&document.notes?document.notes:''].filter(Boolean).join('\n\n'),required:true,completion:'read'})),
+ };
 }
 export function simulatorFromDocument(data:any,filename:string,s:Simulator,careers:{id:string;name:string}[]){
  const tests=data.tests||[];

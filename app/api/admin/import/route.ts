@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     const previous = await document(owner, "rv360:imports", []);
     const existing = previous.find((f: any) => f.hash === digest && f.educationLevel === educationLevel);
     const resume = async (record: any) => {
-      if (record.status !== "Completado") await startJob(owner, record.id, educationLevel);
-      return NextResponse.json({id:record.id, status:record.status === "Completado" ? "Completado" : "Procesando", educationLevel, reused:true}, {status:202});
+      const status = await startJob(owner, record.id, educationLevel, {sourceBytes: bytes, reuseCompleted: true});
+      return NextResponse.json({id:record.id, status, educationLevel, reused:true}, {status:202});
     };
     if (existing && reuse) return await resume(existing);
     if (existing)

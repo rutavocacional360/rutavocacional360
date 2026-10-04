@@ -1,8 +1,9 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { db, document, put, fail } from "./store";
 import { assessmentImportLevel, scopeImportedTests } from "./assessment-import";
+import { currentDocumentExtraction, DOCUMENT_EXTRACTION_VERSION } from "./import-version";
 const globalJobs = globalThis as unknown as {
   rutaJobs?: Map<string, ChildProcess>;
   rutaPendingJobs?: Map<string, symbol>;
@@ -40,6 +41,7 @@ export async function cancelJob(owner: string, id: string) {
     status: "Cancelado",
     error: "Importación cancelada. Puedes reintentar.",
     tests: undefined,
+    course: undefined,
     text: undefined,
     warnings: undefined,
     images: undefined,
@@ -62,17 +64,20 @@ export async function assignJob(owner: string, id: string, requestedLevel: unkno
     return educationLevel;
   });
 }
-export async function startJob(owner: string, id: string, requestedLevel?: unknown) {
+export async function startJob(owner: string, id: string, requestedLevel?: unknown,
+  options: { sourceBytes?: Buffer; reuseCompleted?: boolean } = {}) {
   const record = (await document(owner, "rv360:imports", [])).find(
     (r: any) => r.id === id,
   );
   if (!record) fail("Importación no encontrada.", 404);
-  if (record.status === "Completado")
-    fail("El documento ya se extrajo. Revisa sus instrumentos.", 409);
   const educationLevel = assessmentImportLevel(['bachillerato','universidad'].includes(record.educationLevel) ? record.educationLevel : requestedLevel);
   if (requestedLevel !== undefined && assessmentImportLevel(requestedLevel) !== educationLevel)
     fail("La importación pertenece a otra categoría.", 409);
-  if (jobs.has(id) || pending.has(id)) return;
+  if (currentDocumentExtraction(record)) {
+    if (options.reuseCompleted) return "Completado";
+    fail("El documento ya se extrajo. Revisa sus instrumentos.", 409);
+  }
+  if (jobs.has(id) || pending.has(id)) return "Procesando";
   if (jobs.size + pending.size >= 2)
     fail(
       "Hay dos documentos procesándose. Espera un momento y reintenta.",
@@ -90,12 +95,21 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
       await updateJob(owner, id, { status: "Error", error, errorCode: "IMPORT_WORKER_MISSING" }, () => pending.get(id) === token);
       fail(error, 503);
     }
-    bytes = await readFile(resolve(importFolder(), id));
+    if (options.sourceBytes) {
+      // Reserve the job before restoring the source: two simultaneous uploads
+      // must neither start two workers nor read a partially restored file.
+      await mkdir(importFolder(), { recursive: true });
+      await writeFile(resolve(importFolder(), id), options.sourceBytes, { flag: "wx" })
+        .catch((error: NodeJS.ErrnoException) => { if (error.code !== "EEXIST") throw error; });
+      bytes = options.sourceBytes;
+    } else {
+      bytes = await readFile(resolve(importFolder(), id));
+    }
   } catch (error) {
     if (pending.get(id) === token) pending.delete(id);
     throw error;
   }
-  if (pending.get(id) !== token) return;
+  if (pending.get(id) !== token) return "Procesando";
   try {
   await updateJob(owner, id, {
     status: "Procesando",
@@ -103,7 +117,9 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
     progress: 10,
     error: "",
     errorCode: undefined,
+    extractionVersion: undefined,
     tests: undefined,
+    course: undefined,
     text: undefined,
     warnings: undefined,
     images: undefined,
@@ -112,7 +128,7 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
     if (pending.get(id) === token) pending.delete(id);
     throw error;
   }
-  if (pending.get(id) !== token) return;
+  if (pending.get(id) !== token) return "Procesando";
   let child: ChildProcess;
   try {
     child = fork(
@@ -192,6 +208,7 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
           status: "Completado",
           progress: 100,
           ...message.result,
+          extractionVersion: DOCUMENT_EXTRACTION_VERSION,
           educationLevel,
           tests: scopeImportedTests(message.result.tests || [], educationLevel),
         });
@@ -239,4 +256,5 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
   } catch {
     sendFailed();
   }
+  return "Procesando";
 }

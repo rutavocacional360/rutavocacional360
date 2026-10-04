@@ -125,22 +125,22 @@ export function CourseEditor({
         >
           <option value="general">Preparación general</option>
           <option value="field">Introducción a un campo</option>
-          <option value="admission">Convocatoria institucional</option>
+          {d.educationLevel!=='bachillerato'&&<option value="admission">Convocatoria institucional</option>}
         </SelectField>
       </div>
       <ChoiceList
-        label="Carreras relacionadas"
+        label={d.educationLevel==='bachillerato'?'Opciones de bachillerato relacionadas':'Carreras relacionadas'}
         items={d.careers}
         value={c.careerIds}
-        onChange={(careerIds) => patch({ careerIds, institutions: (c.institutions || []).filter(i => d.careers.some((career: any) => careerIds.includes(career.id) && career.offers.some((o: any) => o.institution === i))) })}
+        onChange={(careerIds) => patch({ careerIds, institutions: (c.institutions || []).filter(i => d.careers.some((career: any) => careerIds.includes(career.id) && career.offers?.some((o: any) => o.institution === i))) })}
       />
-      <ChoiceList
+      {d.educationLevel!=='bachillerato'&&<><ChoiceList
         label="Universidades relacionadas"
-        items={[...new Set<string>(d.careers.filter((career: any) => c.careerIds.includes(career.id)).flatMap((career: any) => career.offers.map((o: any) => o.institution)))].sort().map(name => ({ id: name, name }))}
+        items={[...new Set<string>(d.careers.filter((career: any) => c.careerIds.includes(career.id)).flatMap((career: any) => (career.offers||[]).map((o: any) => o.institution)))].sort().map(name => ({ id: name, name }))}
         value={c.institutions || []}
         onChange={(institutions) => patch({ institutions })}
       />
-      <small>Selecciona primero las carreras. Aparecen las universidades que las ofrecen en el catálogo de Ecuador. Para preparar un examen de una convocatoria concreta, elige su perfil de admisión.</small>
+      <small>Selecciona primero las carreras. Aparecen las universidades que las ofrecen en el catálogo de Ecuador. Para preparar un examen de una convocatoria concreta, elige su perfil de admisión.</small></>}
       <ChoiceList
         label="Relaciones por área revisadas"
         items={[...new Set<string>(d.careers.map((c: any) => c.area))].map(
@@ -165,7 +165,8 @@ export function CourseEditor({
             ),
           });
         return (
-          <section className="training-module" key={a.id}>
+          <details className="training-module" key={a.id} open={i===0}>
+            <summary>{a.title||'Actividad '+(i+1)}</summary>
             <div className="training-actions">
               <b>Actividad {i + 1}</b>
               <Button
@@ -300,7 +301,7 @@ export function CourseEditor({
               />{" "}
               Actividad requerida para el avance
             </label>
-          </section>
+          </details>
         );
       })}
       <Button
@@ -537,9 +538,10 @@ export function SimulatorEditor({
   value: s,
   onChange: change,
   data: d,
-  onSave,onPublish,saving=false,onBusyChange,
+  onSave,onPublish,saving=false,onBusyChange,onCourseImport,
 }: {
   onSave?:()=>void;onPublish?:()=>void;saving?:boolean;onBusyChange?:(busy:boolean)=>void;
+  onCourseImport?:(course:Course,message:string)=>void|Promise<void>;
   value: Simulator;
   onChange: (v: Simulator) => void;
   data: any;
@@ -594,6 +596,10 @@ export function SimulatorEditor({
     try {
       const result=await importSimulatorDocument(file,s,d.careers,message=>{if(mounted.current)setImportProgress(message);});
       if(!mounted.current)return;
+      if(result.kind==='course'){
+        if(!onCourseImport)throw Error('Este documento es un programa de actividades. Impórtalo desde Cursos y actividades para conservar sus lecciones.');
+        await onCourseImport(result.course,result.message);return;
+      }
       change(result.simulator);
       setError(result.message);
       setImportFile(null);

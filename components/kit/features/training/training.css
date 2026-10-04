@@ -331,3 +331,5 @@
 .preparation-careers progress{appearance:none;border:0;border-radius:8px;overflow:hidden;background:var(--border)}.preparation-careers progress::-webkit-progress-bar{background:var(--border)}.preparation-careers progress::-webkit-progress-value{background:var(--primary)}.preparation-careers progress::-moz-progress-bar{background:var(--primary)}
 
 .preparation-context{display:grid;gap:10px;min-width:0}.preparation-context p{max-width:75ch;margin:0;line-height:1.65}.preparation-context .text-link{justify-self:start;min-height:44px;display:inline-flex;align-items:center}
+
+.course-lesson-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin-block:1rem}.course-manager .training-module>summary{cursor:pointer;font-weight:700;padding-block:.75rem}.course-manager ol>li{margin-block:1rem}
