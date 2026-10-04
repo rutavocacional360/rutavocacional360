@@ -1,6 +1,8 @@
 import {scienceOptions,technicalOptions,isChoosingBaccalaureate} from './baccalaureate';
 export type EducationLevel='bachillerato'|'universidad';
 export const schoolTarget=(id:unknown):id is string=>typeof id==='string'&&id.startsWith('bachillerato:');
+/** Modalities are publishing scopes, never individual study options for students. */
+export const schoolModalityTarget=(id:unknown)=>id==='bachillerato:ciencias'||id==='bachillerato:tecnico';
 export const preparationHref=(careerId='')=>'/mi-ruta/cursos'+(careerId?'?carrera='+encodeURIComponent(careerId):'');
 /** General preparation belongs to a related specialty, without opening other specialties. */
 export function trainingTargetMatches(resourceIds:readonly string[]|undefined,careerId:string){
@@ -23,10 +25,8 @@ export function schoolPreparationRecommendations(report:any){
  if(!p||p.suggested==='pendiente'||report.readiness?.bachillerato?.ready!==true||report.educationLevel&&report.educationLevel!=='bachillerato')return [];
  const options=p.suggested==='tecnico'?[...(p.technical||[]),...(p.science||[])]:[...(p.science||[]),...(p.technical||[])];
  const ids=options.map(o=>'bachillerato:'+o.id);
- if(['ciencias','ambas'].includes(p.suggested))ids.push('bachillerato:ciencias');
- if(['tecnico','ambas'].includes(p.suggested))ids.push('bachillerato:tecnico');
  return [...new Set<string>(ids)].flatMap(id=>{
-  const target=schoolTrainingTargets.find(t=>t.id===id);
+  const target=schoolTrainingTargets.find(t=>t.id===id&&!schoolModalityTarget(t.id));
   return target?[{careerId:id,educationLevel:'bachillerato',reason:options.find(o=>'bachillerato:'+o.id===id)?.reason||p.reason,suggested:true}]:[];
  });
 }

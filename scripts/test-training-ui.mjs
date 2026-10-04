@@ -21,7 +21,7 @@ try{
  for(const level of ['bachillerato','universidad']){
   globalThis.__trainingQuery='';globalThis.__trainingNavigations=[];globalThis.__trainingButtons=[];
   globalThis.__trainingProfile={stage:level==='bachillerato'?'Estoy en 10.º de EGB y pasaré a 1.º de BGU':'Me gradué del colegio'};
-  globalThis.__trainingFixture={careers:[{id:'bachillerato:ciencias',name:'Opción escolar QA',area:'Ciencias',educationLevel:'bachillerato'},{id:'uni-qa',name:'Opción universitaria QA',area:'Tecnología',educationLevel:'universidad'}],recommendations:[{careerId:'bachillerato:ciencias',reason:'Evidencia QA'},{careerId:'uni-qa',reason:'Evidencia QA'}],attempts:[],simulators:[],readiness:{bachillerato:readiness(false),universidad:readiness(false)}};
+  globalThis.__trainingFixture={careers:[{id:'bachillerato:ciencias-exactas',name:'Opción escolar QA',area:'Ciencias',educationLevel:'bachillerato'},{id:'bachillerato:ciencias',name:'Bachillerato en Ciencias',area:'Modalidad general QA',educationLevel:'bachillerato'},{id:'bachillerato:tecnico',name:'Bachillerato Técnico',area:'Modalidad general QA',educationLevel:'bachillerato'},{id:'uni-qa',name:'Opción universitaria QA',area:'Tecnología',educationLevel:'universidad'}],recommendations:[{careerId:'bachillerato:ciencias-exactas',reason:'Evidencia QA'},{careerId:'bachillerato:ciencias',reason:'Modalidad antigua QA'},{careerId:'bachillerato:tecnico',reason:'Modalidad antigua QA'},{careerId:'uni-qa',reason:'Evidencia QA'}],attempts:[],simulators:[],readiness:{bachillerato:readiness(false),universidad:readiness(false)}};
   const locked=renderToStaticMarkup(React.createElement(StudentCourses));
   assert(locked.includes('Completa tus tests para acceder a los cursos'));assert(locked.includes('Test pendiente QA'));assert(locked.includes('/mi-ruta/evaluaciones'));
   assert(!locked.includes('Opción escolar QA')&&!locked.includes('Opción universitaria QA'),'Stale recommendations must not leak through a locked screen');
@@ -29,6 +29,7 @@ try{
   globalThis.__trainingFixture.readiness[level]=readiness(true);
   const ready=renderToStaticMarkup(React.createElement(StudentCourses));
   assert(ready.includes(level==='bachillerato'?'Opción escolar QA':'Opción universitaria QA'));assert(ready.includes('Autopreparación'));
+  assert(!ready.includes('Bachillerato en Ciencias')&&!ready.includes('Bachillerato Técnico')&&!ready.includes('Modalidad general QA'),'Legacy modality data is excluded from both cards and area filters');
   assert(!ready.includes(level==='bachillerato'?'Opción universitaria QA':'Opción escolar QA'),'Unlocked route must still hide opposite-route courses');
   assert(!locked.includes('aria-label="Nivel de preparación"')&&!ready.includes('aria-label="Nivel de preparación"'),'Students cannot switch to a route inconsistent with their registered stage');
  }
@@ -46,6 +47,10 @@ try{
  assert(!specialty.includes('Otra especialidad QA')&&!specialty.includes('Simulador universidad ajena QA'));
  assert(specialty.includes('Investigación y aplicación de tus resultados'));
  assert(specialty.includes('href="/mi-ruta/resultados"'));
+ globalThis.__trainingQuery='carrera=bachillerato%3Aciencias';
+ const legacyModality=renderToStaticMarkup(React.createElement(StudentCourses));
+ assert(legacyModality.includes('Elige un área o figura profesional para ver sus simuladores.'));
+ assert(!legacyModality.includes('Autopreparación para Bachillerato')&&legacyModality.includes('Ciencias exactas y tecnología'),'Old modality URLs return valid recommended choices without a phantom career');
  globalThis.__trainingQuery='carrera=uni-qa';
  const foreign=renderToStaticMarkup(React.createElement(StudentCourses));
  assert(foreign.includes('Esta opción no pertenece a tu orientación actual'));

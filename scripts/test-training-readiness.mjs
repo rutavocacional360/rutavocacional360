@@ -56,6 +56,10 @@ try {
  const withheld=await complete(instruments[2],{publication:'review'});await locked();
  await api.releaseResult(admin,withheld.id);
  const ready=await trainingState(user);assert(ready.readiness.bachillerato.ready);assert.equal(ready.educationLevel,'bachillerato');assert.equal(ready.readiness.universidad.ready,false);assert.equal(ready.readiness.universidad.total,0);assert(ready.recommendations.length>0);assert(ready.recommendations.every(r=>r.careerId.startsWith('bachillerato:')));assert(ready.careers.every(c=>c.id.startsWith('bachillerato:')));
+ const modalityIds=['bachillerato:ciencias','bachillerato:tecnico'];
+ assert.equal(ready.careers.length,38,'The student catalog contains exactly four science areas and 34 technical figures');
+ assert(!ready.careers.some(c=>modalityIds.includes(c.id))&&!ready.recommendations.some(r=>modalityIds.includes(r.careerId)),'Modalities are never student options, including inherited report data');
+ const adminCatalog=await trainingState(admin);assert(modalityIds.every(id=>adminCatalog.careers.some(c=>c.id===id)),'General preparation scopes remain editable without migrating or deleting saved resources');
  assert(ready.recommendations.filter(r=>r.careerId.startsWith('bachillerato:')).length<40,'Only result-related school targets are offered');
  assert(ready.simulators.some(s=>s.id===simulator.id));
  assert(ready.simulators.every(s=>s.educationLevel==='bachillerato'),'Student catalog carries the actual route explicitly');
@@ -93,6 +97,9 @@ try {
  await assert.rejects(api.startDirectSimulator(user,inheritedSimulator.id,'practice'),/intento pendiente.*otra ruta/);
  await db.prepare('UPDATE training_attempts SET snapshot=? WHERE id=?').run(inheritedSnapshot.snapshot,inheritedAttempt.id);
  const started=await api.startDirectSimulator(user,simulator.id,'practice');assert(started.id);
+ const finishedGeneral=await api.finishTraining(user,started.id);
+ assert.equal(finishedGeneral.state,'graded');
+ assert((await trainingState(user)).attempts.some(a=>a.id===started.id&&a.result),'General-scope results remain in history when modality cards are removed');
  const enrollment=await api.enroll(user,course.id);assert(enrollment.id);
  const courseAttempt=await api.startTraining(user,enrollment.id,'activity','practice');
  assert.equal(courseAttempt.simulator.educationLevel,'bachillerato');

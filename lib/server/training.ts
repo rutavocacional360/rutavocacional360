@@ -33,7 +33,7 @@ import type {
 } from "@/components/kit/lib/training-types";
 import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
-import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
+import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,schoolModalityTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
 type User = {
@@ -600,7 +600,7 @@ export async function trainingState(u: User) {
     educationLevel,
     source:educationLevel==='bachillerato'?schoolCatalogSource:catalog.source,
     institutions:educationLevel==='bachillerato'?[]:catalog.institutions,
-    careers:catalog.careers.filter(c=>preparationLevel([c.id])===educationLevel),
+    careers:catalog.careers.filter(c=>preparationLevel([c.id])===educationLevel&&!schoolModalityTarget(c.id)),
     simulators: unique((await rows(u, "simulator")).filter((s) => s.status !== "draft"))
       .filter(
         (s: Simulator) =>

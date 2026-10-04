@@ -1,7 +1,7 @@
 const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict');
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 const {technicalOptions,educationStages,schoolCatalogSource,baccalaureateModalities,complementaryArtsOffer}=require('../components/kit/data/baccalaureate.ts');
-const {schoolTrainingTargets,defaultPreparationLevel,preparationLevel,schoolTarget,preparationHref,trainingTargetMatches}=require('../components/kit/data/school-training.ts');
+const {schoolTrainingTargets,schoolPreparationRecommendations,schoolModalityTarget,defaultPreparationLevel,preparationLevel,schoolTarget,preparationHref,trainingTargetMatches}=require('../components/kit/data/school-training.ts');
 const {schoolOrientationTemplate,schoolPracticeTemplate}=require('../components/kit/data/school-templates.ts');
 const {calculateTest,instrumentProblems}=require('../components/kit/lib/test-engine.ts');
 const {academicResult,simulatorProblems}=require('../components/kit/lib/training-engine.ts');
@@ -42,6 +42,12 @@ assert(!trainingTargetMatches(['bachillerato:informatica'],'bachillerato:contabi
 assert(!trainingTargetMatches(['bachillerato:tecnico'],'university-career'));
 assert(!trainingTargetMatches(['bachillerato:tecnico'],'bachillerato:inexistente'));
 assert(trainingTargetMatches(['university-career'],'university-career'));
+// Keep broad publishing scopes, but never offer a modality as a student's career.
+const schoolReport={educationLevel:'bachillerato',readiness:{bachillerato:{ready:true}},analysis:{pathway:{suggested:'ambas',science:[{id:'ciencias-exactas',reason:'Ciencias QA'}],technical:[{id:'contabilidad',reason:'Técnica QA'}]}}};
+assert.deepEqual(schoolPreparationRecommendations(schoolReport).map(r=>r.careerId),['bachillerato:ciencias-exactas','bachillerato:contabilidad']);
+assert.equal(schoolTrainingTargets.filter(t=>!schoolModalityTarget(t.id)).length,38,'All 34 technical figures and four science areas stay available');
+const legacyReport={...schoolReport,analysis:{pathway:{...schoolReport.analysis.pathway,science:[{id:'ciencias'},{id:'ciencias-exactas'}],technical:[{id:'tecnico'},{id:'contabilidad'}]}}};
+assert.deepEqual(schoolPreparationRecommendations(legacyReport).map(r=>r.careerId),['bachillerato:ciencias-exactas','bachillerato:contabilidad'],'Legacy pathway data cannot revive modality cards');
 
 const t={...schoolOrientationTemplate(),id:'school',version:'1'};
 assert.deepEqual(instrumentProblems(t),[]);

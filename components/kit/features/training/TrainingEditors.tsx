@@ -1,5 +1,6 @@
 "use client";
 import {instrumentProblems} from '../../lib/test-engine';
+import {schoolModalityTarget} from '../../data/school-training';
 import {autofillSimulator} from '../../lib/simulator-autofill';
 import {importSimulatorDocument} from '../../lib/import-simulator';
 import {DOCUMENT_ACCEPT,DOCUMENT_FORMAT_LABEL,DOCUMENT_FORMAT_HELP,documentFileError} from '../../lib/document-formats';
@@ -635,7 +636,11 @@ export function SimulatorEditor({
             value={s.title}
             onChange={(e) => patch({ title: e.target.value })}
           />
-          <ChoiceList label={d.educationLevel==='bachillerato'?'Áreas y figuras de bachillerato':'Carreras del simulador'} items={d.careers} value={s.careerIds||[]} onChange={careerIds=>patch({careerIds})}/>
+          {d.educationLevel==='bachillerato'?<>
+            <ChoiceList label="Preparación general por modalidad" items={d.careers.filter((c:any)=>schoolModalityTarget(c.id))} value={(s.careerIds||[]).filter(schoolModalityTarget)} onChange={careerIds=>patch({careerIds:[...(s.careerIds||[]).filter(id=>!schoolModalityTarget(id)),...careerIds]})}/>
+            <p className="small muted">Se mostrará dentro de las áreas o figuras recomendadas al estudiante. Las modalidades no aparecen como carreras.</p>
+            <ChoiceList label="Áreas y figuras de bachillerato" items={d.careers.filter((c:any)=>!schoolModalityTarget(c.id))} value={(s.careerIds||[]).filter(id=>!schoolModalityTarget(id))} onChange={careerIds=>patch({careerIds:[...(s.careerIds||[]).filter(schoolModalityTarget),...careerIds]})}/>
+          </>:<ChoiceList label="Carreras del simulador" items={d.careers} value={s.careerIds||[]} onChange={careerIds=>patch({careerIds})}/>}
 
           {d.educationLevel==='universidad'&&!!s.careerIds?.length&&<details><summary>Universidades que ofrecen las carreras seleccionadas</summary>{d.careers.filter((c:any)=>s.careerIds?.includes(c.id)).map((c:any)=><div key={c.id}><strong>{c.name}</strong><ul>{[...new Set<string>((c.offers||[]).map((o:any)=>o.institution))].map(name=><li key={name}>{name}</li>)}</ul>{!c.offers?.length&&<p>Sin oferta registrada en el catálogo.</p>}</div>)}</details>}
           <p className="small muted">Asigna el simulador a las opciones de esta ruta. La nota mide esta práctica de contenidos; no decide qué bachillerato o carrera debe elegir el estudiante.</p>

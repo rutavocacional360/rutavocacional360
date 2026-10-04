@@ -129,8 +129,9 @@ export async function runAdminImportVisual({base,password,folder}) {
   await page.getByRole('button',{name:'Ingresar al panel',exact:true}).click();await page.waitForURL('**/admin');
   const catalog=await api('training');
   const school=catalog.careers.find(c=>c.id==='bachillerato:ciencias');
+  const schoolArea=catalog.careers.find(c=>c.id==='bachillerato:ciencias-exactas');
   const university=catalog.careers.find(c=>!c.id.startsWith('bachillerato:')&&c.offers?.length);
-  assert(school&&university,'Both categories and actual university offers must exist in the catalog');
+  assert(school&&schoolArea&&university,'Both categories, concrete school areas and actual university offers must exist in the catalog');
   const targets={bachillerato:school,universidad:university};
   for(const level of ['bachillerato','universidad']){
    const target=targets[level],wrong=targets[otherLevel(level)];
@@ -159,9 +160,14 @@ export async function runAdminImportVisual({base,password,folder}) {
    await page.getByRole('button',{name:'Volver a tests',exact:true}).click();await waitCatalog('evaluaciones',level);
    await page.reload();await waitCatalog('evaluaciones',level);await card(title).waitFor();
    await card(title).locator('summary').click();await card(title).getByRole('button',{name:'Editar borrador',exact:true}).click();
+   // The editor renders optimistically before Next commits router.push. Back
+   // must test the committed history entry, not race the pending navigation.
+   const savedId=(await api('session')).values['rv360:custom-tests'].find(test=>test.title===title).id;
+   const editorUrl=url=>url.pathname==='/admin/evaluaciones'&&url.searchParams.get('nivel')===level&&url.searchParams.get('editar')===savedId;
+   await page.waitForURL(editorUrl);
    await page.getByLabel('Nombre del test',{exact:true}).waitFor();
    await page.goBack();await waitCatalog('evaluaciones',level);await card(title).waitFor();
-   await page.goForward();await page.getByLabel('Nombre del test',{exact:true}).waitFor();
+   await page.goForward();await page.waitForURL(editorUrl);await page.getByLabel('Nombre del test',{exact:true}).waitFor();
    assert.equal(await page.getByLabel('Nombre del test',{exact:true}).inputValue(),title,'Forward history must reopen the correct saved test');
    await page.getByRole('navigation',{name:'Pasos de creación'}).getByRole('button',{name:/Revisar y publicar$/}).click();
    await page.getByRole('button',{name:'Publicar test',exact:true}).click();
@@ -187,16 +193,34 @@ export async function runAdminImportVisual({base,password,folder}) {
     await uploadWithRecovery(dialog,'simulador',html);
    }
    await page.getByLabel('Nombre del simulador',{exact:true}).waitFor({timeout:60000});
-   const choices=page.getByRole('group',{name:level==='bachillerato'?'Áreas y figuras de bachillerato':'Carreras del simulador',exact:true});
+   if(missingAI){
+    const response=await aiUnavailable;assert.equal(response.status(),503);const failure=await response.json();assert.equal(failure.code,'AI_CONFIG');
+    // Manual edits clear the previous import error. Verify it before recovery.
+    assert(failure.error);await page.getByText(failure.error,{exact:false}).waitFor();
+   }
+   const modalityIds=['bachillerato:ciencias','bachillerato:tecnico'];
+   const choices=page.getByRole('group',{name:level==='bachillerato'?(modalityIds.includes(target.id)?'Preparación general por modalidad':'Áreas y figuras de bachillerato'):'Carreras del simulador',exact:true});
    assert.equal(await choices.getByRole('checkbox',{name:target.name,exact:true}).isChecked(),true,'The document career must be preselected automatically');
    assert.equal(await choices.getByRole('checkbox',{name:wrong.name,exact:true}).count(),0);
+   const expectedTargets=[target.id];
+   if(level==='bachillerato'){
+    const general=page.getByRole('group',{name:'Preparación general por modalidad',exact:true});
+    const concrete=page.getByRole('group',{name:'Áreas y figuras de bachillerato',exact:true});
+    for(const id of modalityIds){const name=catalog.careers.find(c=>c.id===id).name;assert.equal(await concrete.getByRole('checkbox',{name,exact:true}).count(),0,'Modalities cannot appear among concrete study options');}
+    assert.equal(await general.getByRole('checkbox',{name:schoolArea.name,exact:true}).count(),0);
+    assert.equal(await concrete.getByRole('checkbox',{name:wrong.name,exact:true}).count(),0);
+    await concrete.getByRole('checkbox',{name:schoolArea.name,exact:true}).check();
+    assert.equal(await general.getByRole('checkbox',{name:target.name,exact:true}).isChecked(),true,'Selecting an area preserves its general publishing scope');
+    await general.getByRole('checkbox',{name:target.name,exact:true}).uncheck();
+    assert.equal(await concrete.getByRole('checkbox',{name:schoolArea.name,exact:true}).isChecked(),true,'Changing the general scope preserves concrete targets');
+    await general.getByRole('checkbox',{name:target.name,exact:true}).check();
+    expectedTargets.push(schoolArea.id);
+   }
    if(level==='universidad'){
     await page.getByText('Universidades que ofrecen las carreras seleccionadas',{exact:true}).click();
     await page.getByText(university.offers[0].institution,{exact:true}).first().waitFor();
    }
    if(missingAI){
-    const response=await aiUnavailable;assert.equal(response.status(),503);const failure=await response.json();assert.equal(failure.code,'AI_CONFIG');
-    assert(failure.error);await page.getByText(failure.error,{exact:false}).waitFor();
     await page.getByRole('navigation',{name:'Editor de simulador'}).getByRole('button',{name:/Puntuación$/}).click();
     await page.getByLabel('Explicación al estudiante',{exact:true}).fill('Sumar dos unidades y otras dos da cuatro unidades.');
     checks.push({kind:'AI fallback',level,passed:'Missing provider configuration remains actionable; imported questions can be completed manually and saved'});
@@ -205,11 +229,15 @@ export async function runAdminImportVisual({base,password,folder}) {
    await page.getByText('Borrador guardado correctamente.',{exact:true}).waitFor();
    await page.reload();await page.getByLabel('Nombre del simulador',{exact:true}).waitFor();
    assert.equal(await page.getByLabel('Nombre del simulador',{exact:true}).inputValue(),title,'Saved editor URL must recover the draft after reload');
+   if(level==='bachillerato')for(const name of [target.name,schoolArea.name])assert.equal(await page.getByRole('checkbox',{name,exact:true}).isChecked(),true,'General and concrete selections must survive save and reload');
    await page.getByRole('button',{name:'Guardar y volver',exact:true}).click();await waitCatalog('cursos',level);await card(title).waitFor();
    await card(title).locator('summary').click();await card(title).getByRole('button',{name:'Editar borrador',exact:true}).click();
+   const savedId=(await api('training')).simulators.find(simulator=>simulator.title===title).id;
+   const editorUrl=url=>url.pathname==='/admin/cursos'&&url.searchParams.get('nivel')===level&&url.searchParams.get('editar')===savedId;
+   await page.waitForURL(editorUrl);
    await page.getByLabel('Nombre del simulador',{exact:true}).waitFor();
    await page.goBack();await waitCatalog('cursos',level);await card(title).waitFor();
-   await page.goForward();await page.getByLabel('Nombre del simulador',{exact:true}).waitFor();
+   await page.goForward();await page.waitForURL(editorUrl);await page.getByLabel('Nombre del simulador',{exact:true}).waitFor();
    assert.equal(await page.getByLabel('Nombre del simulador',{exact:true}).inputValue(),title,'Forward history must reopen the correct saved simulator');
    await page.getByRole('navigation',{name:'Editor de simulador'}).getByRole('button',{name:/Revisar y publicar$/}).click();
    await page.getByRole('checkbox',{name:'He revisado las claves, explicaciones y procedencia de todas las preguntas.',exact:true}).check();
@@ -220,7 +248,7 @@ export async function runAdminImportVisual({base,password,folder}) {
    await page.getByRole('button',{name:'Publicar simulador',exact:true}).click();
    await verifyCatalog('cursos',level,title);
    const simulator=(await api('training')).simulators.find(simulator=>simulator.title===title);
-   assert.equal(simulator.status,'published');assert.equal(simulator.educationLevel,level);assert.deepEqual(simulator.careerIds,[target.id]);assert.equal(simulator.questions[0].reviewed,true);
+   assert.equal(simulator.status,'published');assert.equal(simulator.educationLevel,level);assert.deepEqual([...simulator.careerIds].sort(),expectedTargets.sort());assert.equal(simulator.questions[0].reviewed,true);
    checks.push({kind:'simulator',level,passed:'HTML import, automatically assigned category-only careers, university offers, draft URL recovery, back/forward history, server grading, review, publication, reload and mobile layout'});
   }
   assert.equal(failures.length,0,JSON.stringify(failures));

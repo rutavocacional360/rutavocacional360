@@ -336,10 +336,13 @@ Prueba visual de integración: después de `npm run build`, ejecuta
 `npm run test:guidance:visual`. Requiere Playwright (instalado localmente o en
 `.qa-tools`) y Chrome en Windows; en otros sistemas usa Chromium de Playwright.
 Abre un navegador aislado con cuentas sintéticas y una base temporal. Comprueba
-formularios, persistencia, cambio Técnico/Ciencias, recomendaciones, detalle de
-carrera, catálogo completo, renderizado y descarga del PDF y consulta administrativa.
-Guarda capturas de escritorio, tableta y móvil y `visual-results.json` en la carpeta
+formularios, persistencia, cambio Técnico/Ciencias, numeración continua de opciones,
+detalles de áreas, figuras y carreras, historial único, catálogo, PDF y consulta administrativa.
+Comprueba también que Cursos excluya las modalidades generales sin perder los
+simuladores heredados por sus áreas y figuras. Guarda capturas de escritorio,
+tableta, móvil de 375/390 px y escala equivalente al 150 %, y `visual-results.json` en la carpeta
 `.qa-tools/guidance-*` indicada al terminar. Mi orientación muestra las opciones
-de la etapa actual; en Universidad incluye las carreras y sus universidades desplegables.
+de la etapa actual; cada opción abre sus detalles y, en Universidad, las instituciones
+que la ofrecen. Las explicaciones extensas, fuentes e historial se consultan bajo demanda.
 El visor PDF tiene una pestaña propia y la política CSP permite leer los archivos
 `blob:` generados localmente, sin habilitar conexiones a servidores externos.

@@ -52,22 +52,21 @@ export async function professionalReport(r:any){
  const summary=clean(r.analysis?.summary);if(school&&summary&&!/univers|educación superior/i.test(summary)&&summary!==clean(pathway?.reason)&&summary!==clean(pathway?.title)&&summary!==clean(pathway?.title+'. '+pathway?.reason))write(summary);
  if(r.historical){write('Esta copia conserva los resultados de su fecha. Consulta tu orientación actual antes de elegir cursos o autopreparación.',9,false,muted);link('Ver mi orientación actual','https://rutavocacional360.com/mi-ruta/resultados');}
  const top=(school?pathway?.highlightedDimensions||r.analysis?.highlightedDimensions||[]:r.analysis?.highlightedDimensions||[]).map(dimensionName);if(ready&&top.length)write('Intereses destacados en tu orientación: '+top.join(', ')+'.',10,true);
- if(ready&&school&&['ciencias','ambas'].includes(pathway?.suggested))preparation('bachillerato:ciencias','Ver autopreparación de Bachillerato en Ciencias');
- if(ready&&school&&['tecnico','ambas'].includes(pathway?.suggested))preparation('bachillerato:tecnico','Ver autopreparación de Bachillerato Técnico');
 
  if(school&&pathway){
   if(ready&&pathway.rankingNote)write(pathway.rankingNote,9,false,muted,4);
   const textHeight=(text:string,size:number,bold=false,gap=2)=>wrap(text,size,174,bold).length*(size*.43+1.3)+gap;
-  const cardHeight=(option:any)=>{const support=evidence(option.evidence);return textHeight(option.name,12,true)+(option.family?textHeight('Familia: '+option.family,8.5):0)+textHeight('Por qué aparece: '+completeText(option.reason),9.5)+(option.subjects?textHeight('Contenidos para comparar: '+option.subjects,9.5):0)+(option.activity?textHeight('Prueba esta actividad: '+option.activity,9.5):0)+(support?textHeight('Respaldo de tus tests: '+support,8.5):0)+(!r.historical?13:0)+3;};
+  const cardHeight=(option:any,title:string)=>{const support=evidence(option.evidence);return textHeight(title,12,true)+(option.family?textHeight('Familia: '+option.family,8.5):0)+textHeight('Por qué aparece: '+completeText(option.reason),9.5)+(option.subjects?textHeight('Contenidos para comparar: '+option.subjects,9.5):0)+(option.activity?textHeight('Prueba esta actividad: '+option.activity,9.5):0)+(support?textHeight('Respaldo de tus tests: '+support,8.5):0)+(!r.historical?13:0)+3;};
   const groups=[{title:'Áreas de Ciencias relacionadas',options:science,description:'Son áreas para explorar dentro de Ciencias; no son especializaciones oficiales del título.'},{title:'Figuras de Bachillerato Técnico relacionadas',options:technical,description:'Figuras del catálogo oficial. Confirma con tu colegio su oferta, talleres y requisitos.'}];
   if(pathway.suggested==='tecnico')groups.reverse();
+  let optionNumber=0;
   for(const group of groups){
-   if(group.options.length)reserve(Math.min(230,5+textHeight(group.title,14,true,4)+textHeight(group.description,9,false,4)+cardHeight(group.options[0])));
+   if(group.options.length)reserve(Math.min(230,5+textHeight(group.title,14,true,4)+textHeight(group.description,9,false,4)+cardHeight(group.options[0],(optionNumber+1)+'. '+group.options[0].name)));
    section(group.title);write(group.description,9,false,muted,4);
    if(!group.options.length)write(ready?'Tus tests están completos. No hay opciones priorizadas en este grupo; compara las modalidades con tu orientador.':'Las opciones relacionadas aparecerán al completar los tests y publicarse sus resultados.');
    for(const option of group.options){
-    const support=evidence(option.evidence);reserve(Math.min(230,cardHeight(option)));
-    write(option.name,12,true);if(option.family)write('Familia: '+option.family,8.5,false,muted);
+    const title=(++optionNumber)+'. '+option.name,support=evidence(option.evidence);reserve(Math.min(230,cardHeight(option,title)));
+    write(title,12,true);if(option.family)write('Familia: '+option.family,8.5,false,muted);
     write('Por qué aparece: '+completeText(option.reason),9.5);
     if(option.subjects)write('Contenidos para comparar: '+option.subjects,9.5);
     if(option.activity)write('Prueba esta actividad: '+option.activity,9.5);
@@ -78,8 +77,9 @@ export async function professionalReport(r:any){
  }else if(ready){
   section('Carreras relacionadas y cómo explorarlas');
   if(!recommendations.length)write('Tus tests están completos. Las respuestas todavía no permiten priorizar una carrera; contrasta tus intereses con experiencias y orientación docente.');
-  for(const rec of recommendations){
-   reserve(65);write(r.catalog?.find((career:any)=>career.id===rec.careerId)?.name||rec.careerId,13,true);
+  for(const [index,rec] of recommendations.entries()){
+   const title=(index+1)+'. '+(r.catalog?.find((career:any)=>career.id===rec.careerId)?.name||rec.careerId);
+   reserve(Math.max(65,wrap(title,13,174,true).length*(13*.43+1.3)+45));write(title,13,true);
    write('Por qué aparece: '+rec.reason,10);const support=evidence(rec.evidence);if(support)write('Respaldo de tus tests: '+support,8.5,false,muted);
    if(rec.comparison)write('Qué comparar: '+rec.comparison,9.5);if(rec.explore)write('Prueba esta actividad: '+rec.explore,9.5);
    const offers=r.offers?.[rec.careerId]||[];if(offers.length){write('Dónde investigar · '+offers.length+' ofertas en la consulta CES',10,true);for(const offer of offers.slice(0,3))write(offer.institution+' · '+offer.title+' · '+offer.location+' · '+offer.modality,9,false,muted);if(offers.length>3)write('Puedes consultar las demás ofertas en el informe digital y en el CES.',8.5,false,muted);}

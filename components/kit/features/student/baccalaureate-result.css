@@ -16,6 +16,11 @@
 .bp-group-heading .button{flex-shrink:0;font-size:14px}
 .bp-preferred .bp-group-heading h3{color:var(--primary,#6c51cf)}
 .bp-option-grid{min-width:0}
+.bp-root .rd-option-heading h4{margin:0}
+.bp-reference-content{display:grid;gap:24px}
+.bp-reference-content p{max-width:80ch}
+.bp-reference>.bp-reference-content{padding:12px 0 20px}
+.bp-reference>.bp-next{padding-top:12px}
 .bp-root .rd-career p,.bp-root .rd-career-detail p{font-size:15px;line-height:1.7;margin:6px 0 12px;color:var(--rd-muted)}
 .bp-more{margin-top:8px}
 .bp-more>.bp-option-grid{margin:4px 0 12px}

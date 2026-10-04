@@ -5,10 +5,19 @@ import {mkdirSync,mkdtempSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {careerStudyDetails} from '../components/kit/features/student/career-description.ts';
+
+const fullStudyText='Sistemas naturales y producción sostenible; explora actividades y compara asignaturas.';
+assert.deepEqual(careerStudyDetails({comparison:'SISTEMAS  naturales y producción sostenible.',explore:fullStudyText}),[fullStudyText],'The dialog shows the full guidance once when it already includes the comparison');
+assert.deepEqual(careerStudyDetails({comparison:'Compara talleres.',explore:'Visita un laboratorio.'}),['Compara talleres.','Visita un laboratorio.'],'Distinct study guidance is preserved');
+assert.deepEqual(careerStudyDetails({comparison:fullStudyText,explore:'Sistemas naturales y producción sostenible'}),[fullStudyText],'A longer comparison preserves the full content without repeating its shorter exploration');
+assert.deepEqual(careerStudyDetails({comparison:'Arte',explore:'Artes escénicas'}),['Arte','Artes escénicas'],'Similar word fragments are not treated as duplicate sentences');
+assert.deepEqual(careerStudyDetails({comparison:'Texto histórico sin exploración.'}),['Texto histórico sin exploración.']);
+assert.deepEqual(careerStudyDetails({}),[]);
 
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','guidance-ui-'));
-await build({stdin:{contents:`export {BaccalaureateResult} from './components/kit/features/student/BaccalaureateResult';export {BaccalaureateFields} from './components/kit/components/domain/BaccalaureateFields';export {schoolGuidance} from './components/kit/lib/school-guidance';export {technicalOptions} from './components/kit/data/baccalaureate';export {TestResult} from './components/kit/features/student/TestResult';export {GuidanceDocument,ResultScores,ResultAnswers} from './components/kit/features/student/ResultsDocument';export {CompactTests} from './components/kit/features/student/CompactDashboard';export {SchoolRouteStart} from './components/kit/features/student/SchoolRouteStart';export {reportEducationLevel,reportNextSteps} from './components/kit/features/student/report-route';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile:resolve(folder,'ui.cjs'),loader:{'.css':'empty'},plugins:[{name:'fixture-session',setup(build){
+await build({stdin:{contents:`export {GuidanceResults} from './components/kit/features/student/GuidanceResults';export {BaccalaureateResult} from './components/kit/features/student/BaccalaureateResult';export {BaccalaureateFields} from './components/kit/components/domain/BaccalaureateFields';export {schoolGuidance} from './components/kit/lib/school-guidance';export {technicalOptions} from './components/kit/data/baccalaureate';export {TestResult} from './components/kit/features/student/TestResult';export {GuidanceDocument,ResultScores,ResultAnswers} from './components/kit/features/student/ResultsDocument';export {CompactTests} from './components/kit/features/student/CompactDashboard';export {SchoolRouteStart} from './components/kit/features/student/SchoolRouteStart';export {reportEducationLevel,reportNextSteps} from './components/kit/features/student/report-route';`,resolveDir:process.cwd(),loader:'tsx'},jsx:'automatic',bundle:true,platform:'node',packages:'external',format:'cjs',outfile:resolve(folder,'ui.cjs'),loader:{'.css':'empty'},plugins:[{name:'fixture-session',setup(build){
  build.onResolve({filter:/\/lib\/session$/},()=>({path:'session',namespace:'fixture'}));
  build.onResolve({filter:/\/lib\/professional-report$/},()=>({path:'pdf',namespace:'fixture'}));
  build.onResolve({filter:/\/ui\/PdfViewer$/},()=>({path:'viewer',namespace:'fixture'}));
@@ -16,7 +25,7 @@ await build({stdin:{contents:`export {BaccalaureateResult} from './components/ki
  build.onResolve({filter:/\/training\/TrainingSummary$/},()=>({path:'summary',namespace:'fixture'}));
  build.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='session'?`export function useSession(){return {user:{role:globalThis.__guidanceTestRole},values:globalThis.__guidanceTestValues||{}}}export async function previewAction(){return {items:[]}};export async function refreshSession(){}`:args.path==='pdf'?`export async function professionalReport(){return {output(){return new Blob()}}}`:args.path==='viewer'?`export function PdfViewer(){return null}`:args.path==='training'?`export async function trainingApi(){}`:`export function TrainingSummary(){return null}`}));
 }}]});
-const {BaccalaureateResult,BaccalaureateFields,schoolGuidance,GuidanceDocument,ResultScores,ResultAnswers,CompactTests,SchoolRouteStart,reportEducationLevel,reportNextSteps,technicalOptions,TestResult}=createRequire(import.meta.url)(resolve(folder,'ui.cjs'));
+const {GuidanceResults,BaccalaureateResult,BaccalaureateFields,schoolGuidance,GuidanceDocument,ResultScores,ResultAnswers,CompactTests,SchoolRouteStart,reportEducationLevel,reportNextSteps,technicalOptions,TestResult}=createRequire(import.meta.url)(resolve(folder,'ui.cjs'));
 const schoolProfile={stage:'Estoy en 10.º de EGB y pasaré a 1.º de BGU',baccalaureate:'tecnico',specialty:'Informática',learningPreference:'aplicar'};
 const pathway=schoolGuidance(['R','I','A','S','E','C'].map(d=>({dimension:d,raw:d==='R'?25:d==='I'?20:10})),[],schoolProfile,[{id:'software',name:'Ingeniería de Software',areaId:'tecnologia'}]);
 const render=(Component,props={})=>renderToStaticMarkup(React.createElement(Component,props));
@@ -28,7 +37,10 @@ try{
  for(const label of ['Modalidad recomendada: Bachillerato Técnico','Bachillerato en Ciencias','Informática','Recomendaciones para avanzar','/mi-ruta/perfil'])assert(html.includes(label),label);
  assert(!/universidad|universitari/i.test(html),'School guidance must not render university bridges, programs or careers');
  assert(!html.includes('NaN'));
- assert(html.includes('OPCIÓN 01 PARA EXPLORAR')&&html.includes('Por qué aparece en tus resultados'),'School cards follow the university exploration flow');
+ assert(html.includes('class="rd-option-number" aria-label="Opción 1">1</span>'),'School cards use visible numbered options');
+ const optionNumbers=markup=>Array.from(markup.matchAll(/class="rd-option-number" aria-label="Opción (\d+)">(\d+)<\/span>/g),match=>{assert.equal(match[1],match[2]);return Number(match[1]);});
+ assert.deepEqual(optionNumbers(html),Array.from({length:pathway.science.length+pathway.technical.length},(_,index)=>index+1),'School numbering continues across both modality groups, including ties');
+ assert(!html.includes('Por qué aparece en tus resultados'),'Detailed reasons use the named dialog action instead of repeated disclosures in every card');
  for(const option of [...pathway.science,...pathway.technical]){
   const technical=pathway.technical.some(item=>item.id===option.id);
   assert(html.includes('aria-label="'+(technical?'Conocer la figura: ':'Conocer el área: ')+option.name+'"'),'Each school option has a named detail action');
@@ -50,17 +62,28 @@ try{
   assert.equal(html.split('href="'+href+'"').length-1,2,option.name+' title and CTA share the same preparation target');
  }
  assert(html.indexOf('aria-label="Bachillerato Técnico"')<html.indexOf('aria-label="Bachillerato en Ciencias"'),'Recommended technical modality appears first');
- assert(html.includes(preparationHref('bachillerato:tecnico')));
+ assert(!html.includes('href="'+preparationHref('bachillerato:tecnico')+'"')&&!html.includes('href="'+preparationHref('bachillerato:ciencias')+'"'),'Modalities never link to preparation as if they were specific study options');
  const open=renderPath({...pathway,suggested:'ambas',science:[],technical:[]});
  assert(!/Sin áreas priorizadas|Completa tus intereses/.test(open),'Complete open profiles do not ask students to repeat completed tests');
  assert(open.includes('Tus respuestas no dan prioridad'));
- assert(open.includes(preparationHref('bachillerato:ciencias'))&&open.includes(preparationHref('bachillerato:tecnico')),'Open complete profiles may prepare general modalities');
+ assert(!open.includes('/mi-ruta/cursos?carrera='),'Open profiles without specific options use the reference catalog instead of modality course links');
  const review=renderPath({...pathway,suggested:'pendiente',science:[],technical:[]});
  assert(review.includes('Tests completos: orientación por revisar'));
  assert(!review.includes('Resultado pendiente:')&&!review.includes('Continuar mis tests')&&!review.includes('/mi-ruta/cursos?carrera='),'Unmapped complete tests need review, not false incompletion or preparation unlock');
  for(const figure of technicalOptions)assert(pending.includes(figure.name),figure.name+' missing from the reference catalog');
  globalThis.__guidanceTestRole='admin';
  assert(!render(BaccalaureateResult,{pathway}).includes('/mi-ruta/perfil'));
+
+ const historySubmission=(id,title,educationLevel)=>({id,version:'1',created_at:'2026-10-02T12:00:00Z',snapshot:JSON.stringify({id,educationLevel,title,questions:[],options:[]}),answers:'{}',scores:'[]',resultReleased:true});
+ globalThis.__guidanceTestRole='student';
+ globalThis.__guidanceTestValues={'rv360:profile':schoolProfile,'rv360:submissions':[historySubmission('first','Única entrega escolar uno QA','bachillerato'),historySubmission('second','Única entrega escolar dos QA','bachillerato'),historySubmission('university','Entrega ajena universitaria QA','universidad')]};
+ const history=render(GuidanceResults);
+ assert.equal(history.split('class="results-history"').length-1,1,'Submissions share one collapsed history section');
+ assert(history.includes('<details class="results-history"><summary>Historial y opciones del informe</summary>'));
+ for(const title of ['Única entrega escolar uno QA','Única entrega escolar dos QA'])assert.equal(history.split(title).length-1,1,'Each delivery appears once without a duplicate compact history');
+ assert(!history.includes('Entrega ajena universitaria QA'),'History stays scoped to the active route');
+ globalThis.__guidanceTestValues={'rv360:profile':schoolProfile};
+ globalThis.__guidanceTestRole='admin';
  const value={province:'',canton:'',parish:'',schoolId:'',institution:'',...schoolProfile};
  const form=render(BaccalaureateFields,{value,onChange:()=>{}});
  assert(form.includes('Especialidad o figura profesional'));assert(form.includes('value="Informática"'));
@@ -85,6 +108,8 @@ try{
  assert(!render(GuidanceDocument,{report:{...report,historical:true}}).includes('/mi-ruta/cursos?carrera='),'Historical guidance never opens current personalized preparation');
  const incompleteDocument=render(GuidanceDocument,{report:{...report,partial:true,progress:{submitted:1,total:3},readiness:{bachillerato:{ready:false,total:3,completed:1,pending:[]}}}});
  assert(!incompleteDocument.includes('bp-option-title')&&!incompleteDocument.includes('/mi-ruta/cursos?carrera='),'The partial document does not recommend or link areas');
+ const reviewDocument=render(GuidanceDocument,{report:{...report,analysis:{...report.analysis,pathway:{...pathway,suggested:'pendiente',science:[],technical:[]}}}});
+ assert.equal(reviewDocument.split('Consultar todas las opciones oficiales de Bachillerato').length-1,1,'Complete tests without a specific orientation show the reference catalog only once');
  assert(!/universidad|universitari/i.test(schoolDocument),'School document must hide university tabs, sources, recommendations, dialogs and bridges even with legacy mixed data');
  assert(schoolDocument.includes('Informe PDF'),'Keep PDF access for the school route');
  assert.deepEqual(reportNextSteps(report),pathway.nextSteps.filter(s=>!/universidad|universitari|educación superior/i.test(s)));
@@ -93,12 +118,16 @@ try{
   const rendered=render(GuidanceDocument,{report:{...report,ai:{status,error:{message:'INTERNAL_PROVIDER_ERROR_QA'}},analysis:{...report.analysis,limitations:['La IA interpreta puntuaciones agregadas.']}}});
   assert(!/\bIA\b|INTERNAL_PROVIDER_ERROR_QA|gemini/i.test(rendered),'Provider details stay out of student reports: '+status);
   assert(rendered.includes('Modalidad recomendada:'));
-  assert(/<details[^>]*open[^>]*class="rd-disclosure rd-next"/.test(rendered),'Next steps are expanded');
+  assert(rendered.includes('<details class="rd-footnotes rd-disclosure"><summary>Detalles y próximos pasos</summary>'),'Long explanations and next steps are grouped and collapsed');
+  assert(!/<details[^>]*open/.test(rendered),'No long explanation or official catalog opens by default');
   for(const step of reportNextSteps(report))assert(rendered.includes(step));
  }
  const university={...report,educationLevel:'universidad',profile:{stage:'Me gradué del colegio'},readiness:{universidad:{ready:true}},analysis:{...report.analysis,pathway:null,summary:'Análisis universitario QA'}};
  globalThis.__guidanceTestValues={'rv360:profile':university.profile};
  const universityDocument=render(GuidanceDocument,{report:university});
+ const numberedUniversity=render(GuidanceDocument,{report:{...university,analysis:{...university.analysis,recommendations:[{careerId:'one',reason:'Motivo breve heredado QA'},{careerId:'two',reason:'Motivo dos QA'},{careerId:'three',reason:'Motivo tres QA'}]}}});
+ assert.deepEqual(optionNumbers(numberedUniversity),[1,2,3],'University options have consecutive visible numbers');
+ assert(numberedUniversity.includes('Motivo breve heredado QA'),'Legacy reports retain a useful card description when exploration text is missing');
  assert(universityDocument.includes('Ingeniería universitaria QA'));assert(universityDocument.includes('Fuente de las universidades recomendadas'));
  assert(universityDocument.includes(preparationHref('software')),'University careers have direct preparation links');
  assert(universityDocument.includes('<a class="rd-career-title" href="'+preparationHref('software')+'">'),'Career titles open their preparation');

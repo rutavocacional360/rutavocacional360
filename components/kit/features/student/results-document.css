@@ -46,6 +46,12 @@
 .rd-career h4{font-size:1.125rem;line-height:1.5;margin:8px 0 10px;overflow-wrap:anywhere;text-transform:none}
 .rd-career p,.rd-career-detail p{font-size:15px;line-height:1.7;color:var(--rd-muted);margin:6px 0 12px}
 .rd-recommended{display:flex;flex-direction:column}
+.rd-option-heading{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.rd-option-number{display:grid;place-items:center;flex-shrink:0;width:36px;height:36px;border-radius:10px;background:var(--primary-soft,#eeebfc);color:var(--rd-purple);font-size:16px;font-weight:750;font-variant-numeric:tabular-nums}
+.rd-career .rd-option-heading h4{margin:0;min-width:0;flex:1}
+.rd-career .rd-option-description{margin:14px 0 4px}
+.rd-rationale,.bp-rationale{margin-top:12px;border-top:1px solid #d6cbfa}
+.rd-rationale p,.bp-rationale p{padding-bottom:12px;max-width:76ch}
 .rd-root summary{font-size:16px;font-weight:600;cursor:pointer;min-height:44px;padding:12px 0;line-height:1.5;overflow-wrap:anywhere}
 .rd-offer-details{margin:0 0 8px}
 .rd-follow-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
@@ -69,7 +75,11 @@
 .rd-document footer{font-size:14px;line-height:1.6;color:var(--rd-muted);padding:12px 20px;background:#fafbfe}
 .rd-pdf-full{max-width:1000px;margin:0 auto}
 .rd-pdf-state{padding:20px}
-.rd-footnotes{margin-top:24px;border-top:1px solid var(--rd-line);padding-top:12px;color:var(--rd-muted)}
+.rd-footnotes{margin-top:24px;border:1px solid var(--rd-line);border-radius:12px;background:var(--surface,#fff);padding:0 20px;color:var(--rd-muted)}
+.rd-footnotes>summary{color:var(--rd-ink);padding:16px 0}
+.rd-details-content{display:grid;gap:24px;padding:8px 0 20px}
+.rd-details-content p{max-width:80ch}
+.rd-details-content h3{color:var(--rd-ink)}
 .rd-footnotes>p{font-size:14px;display:flex;align-items:center;gap:8px}
 .rd-disclosure{border-bottom:1px solid var(--rd-line,#e0e5ef)}
 .rd-disclosure p{font-size:15px;line-height:1.7;overflow-wrap:anywhere}
