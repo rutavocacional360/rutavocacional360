@@ -51,5 +51,17 @@ try{
  const imported={course:draft('a'),message:'Importado'};globalThis.__courseQuery='nivel=bachillerato';element=React.createElement(AdminCoursePrograms,{imported,onSimulators(){}});
  await render();assert.equal(title(),'Curso a','An imported draft survives the pending router transition');await visit(route('a'));assert(document.body.textContent.includes('Borrador guardado'));assert(!document.body.textContent.includes('Cambios pendientes de guardar'));
  element=React.createElement(AdminCoursePrograms,{imported:{course:draft('b'),message:'Segundo importado'},onSimulators(){}});await render();await visit(route('b'));assert.equal(title(),'Curso b');assert(!document.body.textContent.includes('Cambios pendientes de guardar'),'An already saved import establishes its own snapshot');
+ const published={...draft('published'),status:'published'};
+ globalThis.__courseData={...globalThis.__courseData,courses:[published]};
+ element=React.createElement(AdminCoursePrograms,{imported:{course:published,message:'Documento existente recuperado'},onSimulators(){}});await render();await visit(catalog);
+ assert.equal(title(),undefined,'Reimported published content must never enter the draft editor');assert(document.body.textContent.includes('Documento existente recuperado'));assert(document.body.textContent.includes('Curso published'));
+ await act(async()=>root.unmount());root=createRoot(document.getElementById('root'));
+ const simulator=(id,text)=>({id,version:1,revision:1,status:'draft',educationLevel:'bachillerato',title:'Mismo nombre',careerIds:[],durationMinutes:30,instrument:{title:'Mismo nombre',description:'Preparación',options:[],questions:[]},questions:[{id:id+'-q',text,type:'text'}]});
+ globalThis.__courseData={...globalThis.__courseData,courses:[],simulators:[simulator('one','Primera pregunta'),simulator('two','Otra pregunta')]};
+ element=React.createElement(AdminCourses);await visit('nivel=bachillerato');
+ assert(!document.body.textContent.includes('Hay otro simulador con este nombre'),'Equal titles alone must not raise duplicate warnings');
+ assert(!document.body.textContent.includes('Hay otra ficha con el mismo contenido'),'Different questions are distinct content');
+ globalThis.__courseData={...globalThis.__courseData,simulators:[simulator('one','Primera pregunta'),simulator('two','Primera pregunta')]};await render();
+ assert(document.querySelector('details').textContent.includes('Hay otra ficha con el mismo contenido'),'Exact duplicates remain reviewable inside management controls');
  console.log('PASS course navigation: back/forward, clean draft changes, dirty route protection, refresh preservation, saved import snapshots and pending transitions.');
 }finally{await act(async()=>root.unmount());Object.assign(globalThis,old);for(const key of ['__courseQuery','__courseData','__courseRouter'])delete globalThis[key];}

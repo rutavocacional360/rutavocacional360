@@ -8,7 +8,7 @@ import {preparationLevel} from '../data/school-training';
 export type TrainingDocumentResult = {kind:'course';course:Course;message:string}|{kind:'simulator';simulator:Simulator;message:string};
 /** One import flow for the catalog button and the simulator editor. */
 export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:string;name:string}[],onProgress?:(message:string)=>void):Promise<TrainingDocumentResult>{
- let data;
+ let data,sourceImportId:string|undefined;
  {
    const form = new FormData();
    form.append("file", file);
@@ -17,6 +17,7 @@ export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:
    form.append('reuse', '1');
    onProgress?.('Preparando el documento…');
    const job = await readApiResponse(await adminFetch("/api/admin/import", { method: "POST", body: form }));
+   if(typeof job.id==='string')sourceImportId=job.id;
    for (let n = 0; n < 330; n++) {
      data = await readApiResponse(await adminFetch("/api/admin/import?id=" + encodeURIComponent(job.id) + "&status=1"));
      if (data.status === "Error" || data.status === "Cancelado") throw Error(data.error || 'La extracción se interrumpió. Vuelve a importar el mismo documento para reintentar.');
@@ -27,9 +28,11 @@ export async function importSimulatorDocument(file:File,s:Simulator,careers:{id:
    if (data?.status !== "Completado") throw Error("La extracción sigue en proceso. Vuelve a importar el mismo documento para recuperar sus preguntas.");
  }
  const course=courseFromDocument(data,file.name,s.educationLevel);
+ if(course&&sourceImportId)course.sourceImportId=sourceImportId;
  if(course)return {kind:'course',course,message:'Se detectó un programa de actividades. Se conservaron sus dinámicas, reflexiones y orientaciones como lecciones del curso, sin asignar respuestas correctas a las experiencias personales.'};
  const parsed=simulatorFromDocument(data,file.name,s,careers);
  const result=await autofillSimulator(parsed.simulator,careers,!s.questions.length&&!data.tests?.[0]?.durationMinutes,onProgress);
+ if(!s.id&&!s.questions.length&&sourceImportId)result.simulator.sourceImportId=sourceImportId;
  return {kind:'simulator',simulator:result.simulator,message:parsed.message+' '+result.message};
 }
 /** Pedagogical programs retain their source content and are never sent for answer-key generation. */

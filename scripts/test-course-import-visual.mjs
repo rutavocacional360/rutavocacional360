@@ -12,6 +12,7 @@ import {completeAssessment} from './assessment-fixtures.mjs';
 // Opt-in visual regression with the supplied DOCX. All accounts, uploads and
 // progress belong to a new disposable SQLite database; no real AI is called.
 assert(process.env.QA_COURSE_DOCUMENT,'Set QA_COURSE_DOCUMENT to the programme DOCX');
+const expectedActivities=Number(process.env.QA_COURSE_EXPECTED_ACTIVITIES||12);
 mkdirSync('.qa-tools',{recursive:true});
 const folder=mkdtempSync(resolve('.qa-tools','course-visual-'));
 process.env.DB_DRIVER='sqlite';process.env.DATABASE_PATH=resolve(folder,'course_test.sqlite');
@@ -42,19 +43,25 @@ try{
  await page.goto(base+'/admin/cursos?nivel=bachillerato');await page.getByRole('button',{name:'Importar documento',exact:true}).click();
  await page.getByRole('dialog').locator('input[type=file]').setInputFiles(resolve(process.env.QA_COURSE_DOCUMENT));
  await page.getByLabel('Nombre del curso',{exact:true}).waitFor({timeout:60000});
- const title=await page.getByLabel('Nombre del curso',{exact:true}).inputValue();assert.match(title,/DESCUBRE/i);
+ let title=await page.getByLabel('Nombre del curso',{exact:true}).inputValue();assert.match(title,expectedActivities===1?/El árbol que cuenta mi historia/i:/DESCUBRE/i);
  await page.getByRole('status').filter({hasText:'Borrador guardado'}).waitFor();
- let course=(await catalog()).courses.find(c=>c.title===title);assert(course);assert.equal(course.educationLevel,'bachillerato');assert.equal(course.activities.filter(a=>/^Actividad \d+\./.test(a.title)).length,12);assert(course.activities.every(a=>a.kind==='text'&&a.completion==='read'));
- assert(course.activities[0].content.includes('¿Quién soy?'));assert(course.activities.at(-1).content.length>0);assert(!(await catalog()).simulators.some(s=>s.title===title));
+ let course=(await catalog()).courses.find(c=>c.title===title);assert(course);assert.equal(course.educationLevel,'bachillerato');assert.equal(course.activities.filter(a=>/^Actividad \d+\./.test(a.title)).length,expectedActivities);assert(course.activities.every(a=>a.kind==='text'&&a.completion==='read'));
+ assert(course.activities[0].content.includes('¿Quién soy?'));assert(course.activities.at(-1).content.length>0);assert.equal((await catalog()).simulators.length,0);
+ const courseId=course.id;
  await page.reload();await page.getByLabel('Nombre del curso',{exact:true}).waitFor();assert.equal(await page.getByLabel('Nombre del curso',{exact:true}).inputValue(),title);
  await evidence('course-admin-draft');
+ title+=' (revisado)';await page.getByLabel('Nombre del curso',{exact:true}).fill(title);await page.getByRole('button',{name:'Guardar borrador',exact:true}).click();await page.getByRole('status').filter({hasText:'Borrador guardado'}).waitFor();
+ const uploadAgain=async()=>{await page.goto(base+'/admin/cursos?nivel=bachillerato');await page.getByRole('button',{name:'Importar documento',exact:true}).click();await page.getByRole('dialog').locator('input[type=file]').setInputFiles(resolve(process.env.QA_COURSE_DOCUMENT));};
+ await uploadAgain();await page.getByLabel('Nombre del curso',{exact:true}).waitFor({timeout:60000});await page.getByRole('status').filter({hasText:'Borrador guardado'}).waitFor();
+ assert.equal(await page.getByLabel('Nombre del curso',{exact:true}).inputValue(),title,'Reimport preserves saved edits');assert.equal((await catalog()).courses.length,1);assert.equal((await catalog()).courses[0].id,courseId);
  await page.getByRole('button',{name:'Revisar y publicar curso',exact:true}).click();await evidence('course-admin-review');
  await page.setViewportSize({width:390,height:844});await evidence('course-admin-review-mobile');await page.setViewportSize({width:1440,height:1000});
  await page.getByRole('button',{name:'Publicar curso',exact:true}).click();
  await page.getByRole('heading',{name:'Cursos y actividades',exact:true}).waitFor();await page.getByRole('heading',{name:title,exact:true}).waitFor();
  await page.reload();await page.getByRole('heading',{name:title,exact:true}).waitFor();course=(await catalog()).courses.find(c=>c.title===title);assert.equal(course.status,'published');await evidence('course-published');
+ await uploadAgain();await page.getByRole('heading',{name:'Cursos y actividades',exact:true}).waitFor({timeout:60000});await page.getByRole('heading',{name:title,exact:true}).waitFor();assert.equal((await catalog()).courses.length,1,'Reimport must not duplicate a published course');assert.equal(await page.getByLabel('Nombre del curso',{exact:true}).count(),0,'Published course stays out of the draft editor');
  await page.getByRole('button',{name:'Universidad',exact:true}).click();await page.getByRole('heading',{name:title,exact:true}).waitFor({state:'hidden'});
- checks.push('Real DOCX upload, course classification, all 12 activities retained, draft reload, review, publish, reload and category isolation');
+ checks.push('Real DOCX upload, '+expectedActivities+' activities retained, reimport preserves edited draft and published course, review, publish, reload and category isolation');
  const studentContext=await browser.newContext({viewport:{width:390,height:844}});page=await studentContext.newPage();page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(e.message));
  const login=await studentContext.request.post(base+'/api/auth/login',{headers:{Origin:base},data:{email:'student@example.test',password}});assert.equal(login.status(),200);
  await page.goto(base+'/mi-ruta/cursos');await page.getByRole('region',{name:'Cursos y actividades',exact:true}).getByRole('heading',{name:title,exact:true}).waitFor();await evidence('course-student-catalog-mobile');

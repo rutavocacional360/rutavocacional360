@@ -34,6 +34,7 @@ import type {
 } from "@/components/kit/lib/training-types";
 import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
+import { courseContentKey, simulatorContentKey } from "@/components/kit/lib/training-content";
 import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,schoolModalityTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
@@ -111,19 +112,6 @@ function knownTrainingLevel(value: any) {
     return preparationLevel(value.careerIds);
   return undefined;
 }
-function courseContentKey(value: Course) {
-  return JSON.stringify({
-    level: preparationLevel(value.careerIds, value.educationLevel),
-    title: value.title.trim(), description: value.description, objectives: value.objectives,
-    type: value.type, difficulty: value.level, careerIds: value.careerIds, fields: value.fields,
-    institutions: value.institutions || [], access: value.access, studentIds: value.studentIds,
-    availableFrom: value.availableFrom || '', availableUntil: value.availableUntil || '',
-    profileId: value.profileId || '', profileVersion: value.profileVersion || 0,
-    activities: value.activities?.map(activity => [activity.module, activity.title,
-      activity.kind, activity.content, activity.required, activity.completion,
-      activity.simulatorId || '', activity.simulatorVersion || 0, activity.target ?? null]),
-  });
-}
 export function trainingCatalog() {
   const offers = careerOffers(ecuadorCareers.map((c) => c.id));
   const careers = ecuadorCareers
@@ -162,6 +150,8 @@ async function validate(u: User, kind: string, e: any) {
     fail("Estado inválido.");
   if (e.careerIds !== undefined && !Array.isArray(e.careerIds)) fail('Revisa las opciones de estudio.');
   if (e.educationLevel !== undefined && !['bachillerato','universidad'].includes(e.educationLevel)) fail('Revisa el nivel de preparación.');
+  if (e.sourceImportId !== undefined && (typeof e.sourceImportId !== 'string' || !e.sourceImportId.trim() || e.sourceImportId.length > 200))
+    fail('La referencia del documento importado no es válida.');
   if (e.careerIds?.some(schoolTarget) && e.careerIds.some((id: string) => !schoolTarget(id)))
     fail('Separa las opciones de Bachillerato y Universidad.');
   if (e.educationLevel && e.careerIds?.some((id: string) => schoolTarget(id) !== (e.educationLevel === 'bachillerato')))
@@ -384,7 +374,27 @@ export async function saveTraining(u: User, kind: string, input: any) {
   admin(u);
   return await tx(async () => {
     if (!input || typeof input !== "object") fail("Contenido inválido.");
-    const family = input.id ? (await rows(u, kind)).filter(x => x.id === input.id) : [];
+    const catalog = await rows(u, kind);
+    const family = input.id ? catalog.filter(x => x.id === input.id) : [];
+    const importOwner = 'institution:' + (u.institutionId || '');
+    let importKey: string | undefined;
+    // A reused extraction can regenerate question IDs or AI suggestions. Resume
+    // its existing family before mutation replay, preserving all editor changes.
+    if (!input.id && input.sourceImportId && ['course', 'simulator'].includes(kind)) {
+      await validate(u, kind, input);
+      const level = preparationLevel(input.careerIds, input.educationLevel);
+      importKey = `rv360:training-import:${kind}:${level}:${input.sourceImportId}`;
+      const linked = await document(importOwner, importKey);
+      const scoped = catalog.filter(existing => preparationLevel(existing.careerIds, existing.educationLevel) === level);
+      const imported = scoped.find(existing => existing.id === linked?.id) ||
+        scoped.find(existing => existing.sourceImportId === input.sourceImportId);
+      if (imported) {
+        if (!linked || linked.id !== imported.id) await put(importOwner, importKey, {id: imported.id});
+        const versions = scoped.filter(existing => existing.id === imported.id);
+        return versions.find(existing => existing.status === 'draft') ||
+          versions.find(existing => existing.status === 'published') || versions[0];
+      }
+    }
     if (input.id && !family.length)
       fail('Este contenido ya no está disponible. Recarga el catálogo antes de guardar.', 409);
     // A fresh draft can match the content of a previously published draft. Tie
@@ -446,9 +456,20 @@ export async function saveTraining(u: User, kind: string, input: any) {
         e.educationLevel = familyLevel || requestedLevel;
     }
     await validate(u, kind, e);
-    if (kind === 'course' && !input.id && e.title.trim() &&
-      (await rows(u, kind)).some(existing => courseContentKey(existing) === courseContentKey(e)))
-      fail('Este curso ya existe en esta ruta. Abre el curso existente para editarlo; no es necesario importarlo otra vez.', 409);
+    if (['course', 'simulator'].includes(kind) && !input.id && e.title.trim()) {
+      const contentKey = kind === 'course' ? courseContentKey : simulatorContentKey;
+      const key = contentKey(e);
+      const matches = catalog.filter(existing => contentKey(existing) === key);
+      const existing = matches.find(item => item.status === 'draft') || matches.find(item => item.status === 'published') || matches[0];
+      if (existing) {
+        if (importKey) {
+          // Remember aliases to older imports without touching their snapshots.
+          await put(importOwner, importKey, {id: existing.id});
+          return existing;
+        }
+        fail(`Este ${kind === 'course' ? 'curso' : 'simulador'} ya existe en esta ruta. Abre el contenido existente para editarlo; no es necesario importarlo otra vez.`, 409);
+      }
+    }
     if (kind === "simulator")
       e.questions = e.questions.map((q: any) => ({
         ...q,
@@ -487,6 +508,7 @@ export async function saveTraining(u: User, kind: string, input: any) {
     await db
       .prepare("INSERT INTO training_mutations VALUES(?,?)")
       .run(mutationId, JSON.stringify(e));
+    if (importKey) await put(importOwner, importKey, {id: e.id});
     return e;
   });
 }

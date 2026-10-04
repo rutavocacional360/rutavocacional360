@@ -5,7 +5,8 @@ import {preparationLevel} from '../../data/school-training';
 import {importSimulatorDocument} from '../../lib/import-simulator';
 import {DOCUMENT_ACCEPT,DOCUMENT_FORMAT_LABEL,documentFileError} from '../../lib/document-formats';
 import type {Course} from '../../lib/training-types';
-import {courseFamilies,courseTitleKey} from '../../lib/course-catalog';
+import {courseFamilies} from '../../lib/course-catalog';
+import {courseContentKey} from '../../lib/training-content';
 import {Button,Card,Field,PageHeader,SelectField,Notice} from '../../components/ui/primitives';
 import {Dialog} from '../../components/ui/Dialog';
 import {CourseEditor,blankCourse,blankSimulator} from './TrainingEditors';
@@ -20,11 +21,12 @@ export const courseManagerHref=(level:string,id?:string,version?:number)=>{
 export type CourseNavigationGuard={href:string;dirty:boolean;busy:boolean};
 export function AdminCoursePrograms({imported,onSimulators,onNavigationGuardChange}:{imported?:{course:Course;message:string}|null;onSimulators:(level:string)=>void;onNavigationGuardChange?:(guard:CourseNavigationGuard|null)=>void}){
  const {data:d,error,busy,refresh,run}=useTraining(),router=useRouter(),params=useSearchParams();
- const [editing,setEditing]=useState<Course|null>(imported?.course||null),[snapshot,setSnapshot]=useState(imported?.course.version?JSON.stringify(imported.course):''),[message,setMessage]=useState(imported?.message||'');
+ const importedDraft=imported?.course.status==='draft'?imported.course:null;
+ const [editing,setEditing]=useState<Course|null>(importedDraft),[snapshot,setSnapshot]=useState(importedDraft?.version?JSON.stringify(importedDraft):''),[message,setMessage]=useState(imported?.message||'');
  const [query,setQuery]=useState(''),[status,setStatus]=useState(''),[review,setReview]=useState(false),[importBusy,setImportBusy]=useState(false),[importError,setImportError]=useState(''),[progress,setProgress]=useState(''),[discard,setDiscard]=useState(false);
  const [deleting,setDeleting]=useState<{course:Course;draftOnly:boolean}|null>(null);
- const handledImport=useRef(imported),closed=useRef(''),saving=useRef(false);
- const pendingRoute=useRef<string|null>(imported?courseManagerHref(imported.course.educationLevel||'universidad',imported.course.id,imported.course.version).split('?')[1]:null);
+ const handledImport=useRef(imported),closed=useRef(''),saving=useRef(false),importing=useRef(false);
+ const pendingRoute=useRef<string|null>(imported?courseManagerHref(imported.course.educationLevel||'universidad',importedDraft?.id,importedDraft?.version).split('?')[1]:null);
  const navigate=(href:string,replace=false)=>{pendingRoute.current=href.split('?')[1]||'';if(replace)router.replace(href);else router.push(href);};
  const level=editing?.educationLevel||(params.get('nivel')==='bachillerato'?'bachillerato':'universidad');
  const dirty=!!editing&&JSON.stringify(editing)!==snapshot;
@@ -32,13 +34,14 @@ export function AdminCoursePrograms({imported,onSimulators,onNavigationGuardChan
  const careers=(d?.careers||[]).filter((c:any)=>(c.educationLevel||'universidad')===level);
  const courses=(d?.courses||[]).filter((c:Course)=>preparationLevel(c.careerIds,c.educationLevel)===level);
  const families=courseFamilies<Course>(courses);
+ const contentKeys=new Map(families.map(family=>[family.current,courseContentKey(family.current)]));
  const visible=families.filter(family=>family.versions.some(course=>course.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()))&&(!status||(status==='published'?!!family.published:status==='draft'?!!family.draft:!family.published&&!family.draft)));
  const editingHref=editing?courseManagerHref(level,editing.id,editing.version):'';
  useEffect(()=>{onNavigationGuardChange?.(editing?{href:editingHref,dirty,busy:locked}:null);},[!!editing,editingHref,dirty,locked,onNavigationGuardChange]);
  useEffect(()=>()=>onNavigationGuardChange?.(null),[onNavigationGuardChange]);
  useEffect(()=>{if(!dirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
  useEffect(()=>{
-  if(imported&&handledImport.current!==imported){handledImport.current=imported;setEditing(imported.course);setSnapshot(imported.course.version?JSON.stringify(imported.course):'');setMessage(imported.message);setReview(false);navigate(courseManagerHref(imported.course.educationLevel||'universidad',imported.course.id,imported.course.version),true);}
+  if(imported&&handledImport.current!==imported){const draft=imported.course.status==='draft'?imported.course:null;handledImport.current=imported;setEditing(draft);setSnapshot(draft?.version?JSON.stringify(draft):'');setMessage(imported.message);setReview(false);navigate(courseManagerHref(imported.course.educationLevel||'universidad',draft?.id,draft?.version),true);}
  },[imported]);
  useEffect(()=>{
   if(pendingRoute.current!==null){if(pendingRoute.current!==params.toString())return;pendingRoute.current=null;}
@@ -71,16 +74,20 @@ export function AdminCoursePrograms({imported,onSimulators,onNavigationGuardChan
  const changeStatus=(course:Course,restore=false)=>void run(async()=>{await trainingApi(restore?'/restore':'/archive',{kind:'course',id:course.id,version:course.version,revision:course.revision});setMessage(restore?'Curso restaurado y disponible.':'Curso archivado. Se conservan los avances anteriores.');}).catch(()=>{});
  const remove=()=>{if(!deleting||locked)return;const {course,draftOnly}=deleting;void run(async()=>{await trainingApi(draftOnly?'/delete-draft':'/delete-course',{kind:'course',id:course.id,version:course.version,revision:course.revision});setDeleting(null);setMessage(draftOnly?'Borrador eliminado.':'Curso eliminado del catálogo. Se conservan los avances e informes anteriores.');}).catch(()=>{});};
  const upload=async(file:File)=>{
-  if(locked||!d)return;
+  if(locked||importing.current||!d)return;
   const problem=documentFileError(file.name,file.size);if(problem){setImportError(problem);return;}
-  setImportBusy(true);setImportError('');setProgress('Preparando el documento…');
+  importing.current=true;setImportBusy(true);setImportError('');setProgress('Preparando el documento…');
   try{
    const result=await importSimulatorDocument(file,{...blankSimulator(),educationLevel:level},careers,setProgress);
    if(result.kind!=='course')throw Error('Este documento contiene preguntas de evaluación. Impórtalo desde Simuladores para revisar sus claves.');
    setEditing(result.course);setSnapshot('');setMessage(result.message);setReview(false);
-   try{const saved=await trainingApi('/entity',{kind:'course',entity:result.course});setEditing(saved);setSnapshot(JSON.stringify(saved));navigate(courseManagerHref(level,saved.id,saved.version),true);await refresh();}
+   try{const saved=await trainingApi('/entity',{kind:'course',entity:result.course});
+    if(saved.status==='draft'){setEditing(saved);setSnapshot(JSON.stringify(saved));navigate(courseManagerHref(level,saved.id,saved.version),true);}
+    else{setEditing(null);setSnapshot('');navigate(courseManagerHref(level),true);}
+    if(courses.some((course:Course)=>course.id===saved.id))setMessage('Este documento ya tiene un curso en esta ruta. Se recuperó el contenido guardado, con sus cambios.');
+    await refresh();}
    catch(e){setMessage(result.message+' No se pudo guardar el borrador: '+(e as Error).message+'. Puedes reintentar con Guardar borrador.');}
-  }catch(e){setImportError((e as Error).message);}finally{setImportBusy(false);setProgress('');}
+  }catch(e){setImportError((e as Error).message);}finally{importing.current=false;setImportBusy(false);setProgress('');}
  };
  const missing=editing?[
   ...(!editing.title.trim()?['Escribe el nombre del curso.']:[]),...(!editing.description.trim()?['Escribe una descripción.']:[]),...(!editing.objectives.trim()?['Completa los objetivos de aprendizaje.']:[]),
@@ -99,12 +106,12 @@ export function AdminCoursePrograms({imported,onSimulators,onNavigationGuardChan
   <div className="te-filters"><Field label="Buscar curso" type="search" value={query} onChange={e=>setQuery(e.target.value)}/><SelectField label="Estado" value={status} onChange={e=>setStatus(e.target.value)}><option value="">Todos los estados</option><option value="draft">Borradores</option><option value="published">Publicados</option><option value="archived">Archivados</option></SelectField></div>
   {!d&&!error&&<p role="status">Cargando cursos…</p>}{d&&!courses.length&&<Notice>Aún no hay cursos en esta ruta. Importa un programa o crea sus actividades.</Notice>}{d&&courses.length>0&&!visible.length&&<Notice>No hay cursos que coincidan con estos filtros.</Notice>}
   <div className="training-grid">{visible.map(({current:course,draft,published,versions})=>{
-   const duplicate=families.some(family=>family.current.id!==course.id&&courseTitleKey(family.current.title)===courseTitleKey(course.title));
+   const duplicate=families.some(family=>family.current.id!==course.id&&contentKeys.get(family.current)===contentKeys.get(course));
    const archived=versions.filter(version=>version.status==='archived');
    return <Card className="test-manager-card" key={course.id}>
     <small>{published?'Publicado':draft?'Borrador':'Archivado'} · Versión {course.version}{published&&draft?' · Cambios en borrador v'+draft.version:''}</small>
     <h2>{course.title||'Curso sin título'}</h2><p>{course.activities.length} actividades · {[...new Set(course.activities.map(a=>a.module))].length} módulos</p><p>{course.description.slice(0,240)}</p>
-    {duplicate&&<Notice tone="warning">Hay otro curso con este nombre en esta ruta. Revisa su contenido y elimina la copia que no necesites.</Notice>}
+    {duplicate&&<details><summary>Revisar contenido repetido</summary><p>Hay otra ficha con las mismas actividades y configuración. Puedes revisar ambas antes de eliminar una copia.</p></details>}
     <div className="row"><Button variant="secondary" disabled={locked} onClick={()=>open(draft||course)}>{draft?'Editar borrador':'Editar curso'}</Button>{published&&<Button variant="ghost" disabled={locked} onClick={()=>changeStatus(published)}>Archivar</Button>}{course.status==='archived'&&<Button variant="secondary" disabled={locked} onClick={()=>changeStatus(course,true)}>Restaurar publicación</Button>}<Button variant="danger" disabled={locked} onClick={()=>setDeleting({course:versions[0],draftOnly:false})}>Eliminar curso</Button></div>
     {(draft||archived.length>0)&&<details><summary>Gestionar versiones ({versions.length})</summary><div className="stack">{versions.map(version=><div key={version.version}><p><strong>Versión {version.version}</strong> · {version.status==='draft'?'Borrador':version.status==='published'?'Publicada':'Archivada'}{version.title!==course.title?' · '+version.title:''}</p>{version.status==='draft'&&<div className="row"><Button size="sm" variant="secondary" disabled={locked} onClick={()=>open(version)}>Editar borrador v{version.version}</Button><Button size="sm" variant="danger" disabled={locked} onClick={()=>setDeleting({course:version,draftOnly:true})}>Eliminar borrador v{version.version}</Button></div>}{version.status==='archived'&&!published&&!versions.some(other=>other.version>version.version&&other.status!=='draft')&&<Button size="sm" variant="secondary" disabled={locked} onClick={()=>changeStatus(version,true)}>Restaurar versión {version.version}</Button>}</div>)}</div></details>}
    </Card>;

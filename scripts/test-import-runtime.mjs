@@ -148,8 +148,30 @@ try {
   assert.equal(job.status, 'Completado');
   assert.equal(job.errorCode, undefined);
   assert.equal(job.educationLevel, 'universidad');
+
+  // Storage may be replaced during deployment. A retry must explain how to
+  // restore the source and release its reservation for a subsequent upload.
+  const missingId = 'missing-source-retry';
+  await put(owner, 'rv360:imports', [{id: missingId, name: 'fixture.html', status: 'Procesando', educationLevel: 'universidad'}]);
+  await assert.rejects(startJob(owner, missingId), error => error.status === 409 && /Vuelve a subir el mismo documento/.test(error.message));
+  const [missingSource] = await document(owner, 'rv360:imports');
+  assert.equal(missingSource.status, 'Error');
+  assert.equal(missingSource.errorCode, 'IMPORT_SOURCE_MISSING');
+  assert(!missingSource.error.includes(isolated), 'Missing source errors must not expose internal storage paths');
+  assert(!globalThis.rutaPendingJobs.has(missingId), 'A missing source must release its job reservation');
+  await startJob(owner, missingId, 'universidad', {sourceBytes: Buffer.from(html), reuseCompleted: true});
+  for (let i = 0; i < 120; i++) {
+    job = (await document(owner, 'rv360:imports'))[0];
+    assert.notEqual(job.status, 'Error', job.error);
+    if (job.status === 'Completado') break;
+    await new Promise(resolveDelay => setTimeout(resolveDelay, 50));
+  }
+  assert.equal(job.status, 'Completado');
+  assert.equal(job.id, missingId);
+  assert.equal(job.errorCode, undefined);
+  assert.equal(await readFile(join(process.env.IMPORT_PATH, missingId), 'utf8'), html);
 } finally {
   process.chdir(root);
   await db.close();
 }
-console.log(`PASS isolated import runtime: ${files.length} traced assets (${(packageBytes / 1e6).toFixed(1)} MB), HTML/DOCX/PDF without project dependencies, category preservation, large IPC result, controlled dependency/native binding errors and missing-worker recovery.`);
+console.log(`PASS isolated import runtime: ${files.length} traced assets (${(packageBytes / 1e6).toFixed(1)} MB), HTML/DOCX/PDF without project dependencies, category preservation, large IPC result, controlled dependency/native binding errors and missing-worker/source recovery.`);

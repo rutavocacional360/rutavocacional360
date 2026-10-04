@@ -21,6 +21,7 @@ export type Activity = {
   target?: number;
 };
 export type Course = Versioned & {
+  sourceImportId?: string;
   educationLevel?: "bachillerato" | "universidad";
   institutions?: string[];
   description: string;
@@ -60,6 +61,7 @@ export type BankQuestion = Question & {
   difficulty?: "introductory" | "intermediate" | "advanced";
 };
 export type Simulator = Versioned & {
+  sourceImportId?: string;
   educationLevel?: "bachillerato" | "universidad";
   careerIds?: string[];
   instrument: Instrument;

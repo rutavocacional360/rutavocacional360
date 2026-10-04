@@ -103,7 +103,16 @@ export async function startJob(owner: string, id: string, requestedLevel?: unkno
         .catch((error: NodeJS.ErrnoException) => { if (error.code !== "EEXIST") throw error; });
       bytes = options.sourceBytes;
     } else {
-      bytes = await readFile(resolve(importFolder(), id));
+      try {
+        bytes = await readFile(resolve(importFolder(), id));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        const message = "El archivo original ya no está disponible. Vuelve a subir el mismo documento para recuperar esta importación.";
+        await updateJob(owner, id, {
+          status: "Error", error: message, errorCode: "IMPORT_SOURCE_MISSING",
+        }, () => pending.get(id) === token);
+        fail(message, 409);
+      }
     }
   } catch (error) {
     if (pending.get(id) === token) pending.delete(id);

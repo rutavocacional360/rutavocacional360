@@ -35,6 +35,9 @@ assert.equal(courseFromDocument({tests:[],text:incidentalProgramText},'programa.
   };
   const importedCourse=await require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['Course'],'DESCUBRE.docx'),{...base,educationLevel:'bachillerato'},[]);
   assert.equal(importedCourse.kind,'course');assert.equal(importedCourse.course.activities.length,12);assert.equal(coursePosts,1);assert.equal(coursePolls,1);
+  assert.equal(importedCourse.course.sourceImportId,'course-job','New courses retain the extraction identity');
+  const courseFromExistingEditor=await require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['Course'],'DESCUBRE.docx'),{...simulator,id:'existing-simulator',educationLevel:'bachillerato'},[]);
+  assert.equal(courseFromExistingEditor.kind,'course');assert.equal(courseFromExistingEditor.course.sourceImportId,'course-job','A course detected in an existing simulator editor is still a new course with its own provenance');
   console.log('PASS course import: 12 activities, 4 modules, complete reflections and evaluation, preserved source, no invented keys or AI requests.');
   for(const educationLevel of ['bachillerato','universidad']){
    const target=educationLevel==='bachillerato'?'bachillerato:ciencias':'software';let posts=0,polls=0;
@@ -50,6 +53,7 @@ assert.equal(courseFromDocument({tests:[],text:incidentalProgramText},'programa.
    };
    const result=await require('../components/kit/lib/import-simulator.ts').importSimulatorDocument(new File(['<h1>Fixture</h1>'],'fixture.html',{type:'text/html'}),{...base,educationLevel},[{id:target,name:'Opción QA'}]);
    assert.equal(posts,1);assert.equal(polls,1);assert.equal(result.simulator.educationLevel,educationLevel);assert.deepEqual(result.simulator.careerIds,[target]);
+   assert.equal(result.simulator.sourceImportId,'job-'+educationLevel);
   }
   let cancelledPolls=0;
   global.fetch=async(url,options)=>options?.method==='POST'?Response.json({id:'cancelled'}):(cancelledPolls++,Response.json({status:'Cancelado',error:'Cancelado por administración.'}));
