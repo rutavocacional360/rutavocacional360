@@ -56,9 +56,10 @@ try{
   assert(!/<h3>Bachillerato (en Ciencias|Técnico)<\/h3>/.test(markup),'The modality title is not repeated above the options');
  }
  const tiedHtml=renderPath({...pathway,suggested:'ambas'});
- assert(tiedHtml.includes('Modalidad por definir'));
- assert.deepEqual(optionNumbers(tiedHtml),[],'A tied legacy report must not choose a winner or render either candidate list');
- assert(!tiedHtml.includes('/mi-ruta/cursos?carrera=')&&!tiedHtml.includes('Continuar mis tests'));
+ assert(tiedHtml.includes('Explora Ciencias y Técnico')&&!tiedHtml.includes('Modalidad recomendada:'));
+ assert.deepEqual(optionNumbers(tiedHtml),[...pathway.science,...pathway.technical].map((_,index)=>index+1),'A tie preserves numbered options of both modalities without claiming a winner');
+ for(const option of [...pathway.science,...pathway.technical])assert(tiedHtml.includes('/mi-ruta/cursos?carrera='+encodeURIComponent('bachillerato:'+option.id)),'Every related option retains its preparation');
+ assert(!tiedHtml.includes('Continuar mis tests'));
  const pending=renderPath(pathway,{ready:false,total:3,completed:1,pending:[{id:'a',title:'Intereses pendientes',state:'not_started'},{id:'b',title:'Resultados por publicar',state:'awaiting_results'}]});
  for(const label of ['Modalidad por definir','1 de 3','Intereses pendientes','Pendiente de publicación','Continuar mis tests'])assert(pending.includes(label),label);
  assert(!pending.includes('Modalidad recomendada:'));
@@ -84,7 +85,7 @@ try{
  globalThis.__guidanceTestRole='admin';
  assert(!render(BaccalaureateResult,{pathway}).includes('/mi-ruta/perfil'));
  assert.deepEqual(optionNumbers(renderPath(pathway)),pathway.technical.map((_,index)=>index+1),'Admin shows the same single modality');
- assert.deepEqual(optionNumbers(renderPath({...pathway,suggested:'ambas'})),[],'Admin cannot turn a tie into two recommendations');
+ assert.deepEqual(optionNumbers(renderPath({...pathway,suggested:'ambas'})),[...pathway.science,...pathway.technical].map((_,index)=>index+1),'Admin sees the same options backed by saved results');
 
  const historySubmission=(id,title,educationLevel)=>({id,version:'1',created_at:'2026-10-02T12:00:00Z',snapshot:JSON.stringify({id,educationLevel,title,questions:[],options:[]}),answers:'{}',scores:'[]',resultReleased:true});
  globalThis.__guidanceTestRole='student';

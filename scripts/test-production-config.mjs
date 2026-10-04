@@ -5,6 +5,10 @@ const outside=resolve(process.cwd(),'..','rv360-private-test');
 const valid={DB_DRIVER:'mysql',DB_HOST:'127.0.0.1',DB_NAME:'ruta',DB_USER:'ruta',DB_PASSWORD:'synthetic-only',APP_URL:'https://ruta.example',COOKIE_SECURE:'true',GEMINI_API_KEY:'synthetic-only',IMPORT_PATH:outside+'/imports',PROFILE_PHOTO_PATH:outside+'/photos',ACADEMIC_CONTENT_PATH:outside+'/academic.json'};
 assert.equal(validateProductionConfig(valid).errors.length,0);
 assert.equal(validateProductionConfig(valid).warnings.length,1);
+assert.equal(validateProductionConfig({...valid,TRAINING_MEDIA_PATH:outside+'/training-media'}).errors.length,0);
+for (const destination of ['relative/media',resolve('public/course-media'),outside+'/public_html/media']) {
+  assert(validateProductionConfig({...valid,TRAINING_MEDIA_PATH:destination}).errors.some(error=>error.includes('TRAINING_MEDIA_PATH')));
+}
 assert(validateProductionConfig({...valid,NEXT_PUBLIC_GEMINI_API_KEY:'synthetic-secret'}).errors.length);
 for(const change of [{DB_DRIVER:'sqlite'},{DB_PASSWORD:'REEMPLAZAR'},{APP_URL:'http://ruta.example'},{COOKIE_SECURE:'false'},{APP_URL:'https://ruta.example/path'},{DB_NAME:'ruta_test'},{DB_PORT:'0'},{DB_POOL_SIZE:'NaN'},{GEMINI_API_KEY:''},{IMPORT_PATH:'relative'},{PROFILE_PHOTO_PATH:resolve('public/photos')},{IMPORT_PATH:outside+'/public_html/imports'},{NEXT_PUBLIC_DESIGN_PREVIEW:'true'},{API_ORIGIN:'https://external.example'},{VERCEL:'1'},{SMTP_HOST:'mail.example'},{DATABASE_URL:'mysql://name:password@localhost/database?multipleStatements=true'},{DATABASE_URL:'mysql://name:password@localhost/ruta_test'}])assert(validateProductionConfig({...valid,...change}).errors.length,JSON.stringify(Object.keys(change)));
 assert.equal(validateProductionConfig({...valid,DATABASE_URL:'mysql://user:synthetic@localhost/ruta'}).errors.length,0);

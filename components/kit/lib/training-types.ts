@@ -14,11 +14,25 @@ export type Activity = {
   title: string;
   kind: "text" | "link" | "simulator";
   content: string;
+  responsePrompt?: string;
+  attachments?: ActivityAttachment[];
   simulatorId?: string;
   simulatorVersion?: number;
   required: boolean;
   completion: "read" | "submit" | "score";
   target?: number;
+};
+export type ActivityAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
+export type ActivityResponse = {
+  answers: Record<string, string>;
+  revision: number;
+  updatedAt: string;
+  submittedAt?: string;
 };
 export type Course = Versioned & {
   sourceImportId?: string;

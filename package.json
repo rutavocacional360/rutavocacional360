@@ -12,6 +12,7 @@
     "test:pdf:runtime": "node scripts/test-pdf-runtime.mjs",
     "pretest:pdf": "node scripts/prepare-browser-assets.mjs",
     "test:integration": "node scripts/test-guidance-server.mjs --http",
+    "test:activities": "node scripts/test-guidance-server.mjs --activities-visual",
     "test:startup": "node scripts/test-hostinger-start.mjs",
     "dev": "node scripts/build-workers.mjs && next dev",
     "predev": "node scripts/prepare-browser-assets.mjs",

@@ -30,13 +30,13 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
  async function singleSchoolModality(page,modality,expected,name){
   const region=page.getByRole('region',{name:'Orientación de bachillerato',exact:true});
   await numberedOptions(region,expected,name);
-  assert.equal(await region.locator('.bp-group').count(),modality?1:0,name+': only the selected modality has an option group');
+  assert.equal(await region.locator('.bp-group').count(),modality?1:2,name+': every supported modality has an option group');
   assert.equal(await region.locator('.bp-group-heading h3').filter({hasText:/Bachillerato/}).count(),0,name+': the top modality heading is not repeated');
   if(modality){
    assert.equal(await region.getByRole('button',{name:modality==='ciencias'?/Conocer la figura/:/Conocer el área/}).count(),0,name+': no alternative modality cards');
   }else{
-   await region.getByRole('heading',{name:'Modalidad por definir',exact:true}).waitFor();
-   assert.equal(await region.locator('a[href*="/mi-ruta/cursos?"]').count(),0,name+': a tie never chooses preparation');
+   await region.getByRole('heading',{name:'Explora Ciencias y Técnico',exact:true}).waitFor();
+   assert.equal(await region.locator('a[href*="/mi-ruta/cursos?"]').count(),expected*2,name+': a tie preserves preparation for its supported options');
   }
  }
  async function schoolVariants(context,report){
@@ -53,8 +53,8 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
    try{
     for(const width of [1440,375]){
      await variantPage.setViewportSize({width,height:900});await variantPage.goto(base+'/mi-ruta/resultados');
-     await variantPage.getByRole('heading',{name:suggested==='tecnico'?'Modalidad recomendada: Bachillerato Técnico':'Modalidad por definir',exact:true}).waitFor();
-     await singleSchoolModality(variantPage,suggested==='tecnico'?'tecnico':null,suggested==='tecnico'?variant.analysis.pathway.technical.length:0,suggested+' '+width);
+     await variantPage.getByRole('heading',{name:suggested==='tecnico'?'Modalidad recomendada: Bachillerato Técnico':'Explora Ciencias y Técnico',exact:true}).waitFor();
+     await singleSchoolModality(variantPage,suggested==='tecnico'?'tecnico':null,suggested==='tecnico'?variant.analysis.pathway.technical.length:variant.analysis.pathway.science.length+variant.analysis.pathway.technical.length,suggested+' '+width);
      await shot(variantPage,'resultados-'+suggested+'-'+width);await overflow(variantPage,'resultados-'+suggested+'-'+width);
     }
     if(suggested==='tecnico'){

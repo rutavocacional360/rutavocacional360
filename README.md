@@ -97,6 +97,38 @@ de los cursos. El autoguardado envía las respuestas en orden y las entregas
 recuperables permiten reintentar el cálculo sin perder respuestas. Si vence la
 sesión administrativa, se solicita acceso conservando el editor abierto.
 
+Cuando los intereses respaldan tanto Ciencias como Técnico, los resultados y
+el PDF muestran las opciones concretas de ambas modalidades. Los cursos y
+simuladores correspondientes siguen disponibles; no se fuerza un desempate
+ni se cambia la ruta educativa del estudiante.
+
+Los tests históricos compartidos conservan las relaciones de Bachillerato
+guardadas en su entrega. Al abrir los resultados, los informes anteriores se
+actualizan con las reglas vigentes sin pedir al estudiante repetir sus respuestas.
+
+Las actividades de los cursos permiten responder las preguntas de reflexión
+importadas y las consignas que configure el administrador. Los borradores y
+las entregas se guardan por estudiante, matrícula y actividad. Se conserva la
+versión del curso en la que comenzó el estudiante y sus respuestas al reingresar.
+Si otra sesión guarda o entrega la actividad, el formulario abierto se actualiza.
+Cuando hay texto local pendiente, se conserva y se avisa del conflicto para
+recuperar lo guardado sin sobrescribir silenciosamente ninguna entrega.
+
+El editor de actividades admite imágenes JPG, PNG, WebP y GIF; videos MP4 y
+WebM; audio MP3, WAV, OGG y M4A; y documentos PDF, DOCX, PPTX, XLSX, TXT y
+CSV. Cada actividad admite hasta 12 archivos: 20 MB por imagen o documento y
+100 MB por video o audio. Guarda el curso después de subirlos. Los materiales
+se reproducen o descargan desde la actividad del estudiante con acceso autorizado.
+Sus referencias se guardan en la base de datos y los archivos en almacenamiento
+privado persistente. `TRAINING_MEDIA_PATH` permite indicar una ruta absoluta;
+si se omite, se usa `training-media` junto al directorio `IMPORT_PATH`. Incluye
+esa carpeta en las copias de seguridad junto con la base de datos.
+
+Después de compilar, `npm run test:integration` comprueba publicación, respuestas,
+matrículas, permisos y materiales por HTTP en una instalación aislada.
+`npm run test:activities` añade la prueba visual de carga y reproducción real de
+imagen/video, guardado y entrega del estudiante y revisión administrativa.
+
 Los informes PDF individuales y de orientación siguen una sola ruta e incluyen
 las respuestas, puntuaciones y orientación guardada con el estado real de la IA.
 Las copias integrales anteriores siguen disponibles en el historial; los informes

@@ -7,6 +7,7 @@ import {DOCUMENT_ACCEPT,DOCUMENT_FORMAT_LABEL,DOCUMENT_FORMAT_HELP,documentFileE
 import {PresentationEditor} from '../../components/domain/PresentationEditor';
 import {suggestSimulatorCareers} from "../../lib/simulator-careers";
 import { AcademicQuestionSettings } from "./AcademicQuestionSettings";
+import { ActivityMediaEditor } from "./ActivityMedia";
 import { useState, useEffect, useRef } from "react";
 import {
   Button,
@@ -89,10 +90,12 @@ export function CourseEditor({
   value: c,
   onChange: change,
   data: d,
+  onBusyChange,
 }: {
   value: Course;
   onChange: (c: Course) => void;
   data: any;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const patch = (v: Partial<Course>) => change({ ...c, ...v });
   return (
@@ -228,7 +231,7 @@ export function CourseEditor({
                 })
               }
             >
-              <option value="text">Lección de texto</option>
+              <option value="text">Lección y material multimedia</option>
               <option value="link">Documento o enlace HTTPS</option>
               <option value="simulator">Simulador evaluable</option>
             </SelectField>
@@ -293,6 +296,13 @@ export function CourseEditor({
                 onChange={(e) => update({ content: e.target.value })}
               />
             )}
+            {a.kind !== "simulator" && <TextareaField
+              label="Pregunta o reflexión para responder (opcional)"
+              value={a.responsePrompt || ""}
+              onChange={event => update({responsePrompt: event.target.value})}
+              placeholder="Si la lección ya incluye preguntas, también se mostrarán al estudiante."
+            />}
+            <ActivityMediaEditor attachments={a.attachments} onChange={attachments => update({attachments})} onBusyChange={onBusyChange}/>
             <label>
               <input
                 type="checkbox"

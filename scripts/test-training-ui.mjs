@@ -149,11 +149,13 @@ const requests=[];let simulatorStarted;
 globalThis.__trainingApi=async(path,body)=>{
  requests.push({path,body});
  if(path==='/enroll'){assert.equal(body.courseId,published.id);return saved;}
- if(path==='/read'){
+ if(path==='/activity-response'){
   assert.equal(body.enrollmentId,saved.id);assert(snapshot.activities.some(a=>a.id===body.activityId),'Persist the enrolled activity ID, never the latest published replacement');
   saved={...saved,completed:[...new Set([...saved.completed,body.activityId])]};
   saved.next=snapshot.activities.find(a=>!saved.completed.includes(a.id))||null;
-  return saved;
+  const response={answers:body.answers,revision:body.revision+1,updatedAt:new Date().toISOString(),submittedAt:body.complete?new Date().toISOString():undefined};
+  saved.responses={...saved.responses,[body.activityId]:response};
+  return {response,enrollment:saved};
  }
  if(path==='/start')return {id:'course-exam-attempt',mode:body.mode};
  assert.fail('Unexpected course request '+path);
@@ -175,15 +177,16 @@ try{
  assert.equal(document.querySelector('.training-lesson img,.training-lesson script'),null,'Document markup must never execute as HTML');
  assert.equal(window.documentAttack,undefined);
  assert(!document.body.textContent.includes('Contenido de la nueva versión'));
- await click('Marcar actividad como completada');
- assert.deepEqual(requests.at(-1),{path:'/read',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-two'}});
+ assert(document.querySelector('textarea'),'Reading activities expose a response field');
+ await click('Guardar y completar actividad');
+ assert.deepEqual(requests.at(-1),{path:'/activity-response',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-two',answers:{},revision:0,complete:true}});
  assert(document.body.textContent.includes('2 de 4 actividades completadas'));assert(document.body.textContent.includes('Tu progreso está guardado'));
  assert.equal(document.querySelector('progress').getAttribute('value'),'2');assert.equal(document.querySelector('progress').getAttribute('max'),'4');
  await click('Siguiente actividad');
  const link=document.querySelector('a');assert.equal(link.getAttribute('href'),'https://example.test/material');assert.equal(link.getAttribute('rel'),'noopener noreferrer');
  await click('Siguiente actividad');
  assert.equal(button('Siguiente actividad').disabled,true,'The final activity has no next action');
- assert(!button('Marcar actividad como completada'),'Simulator activities cannot be completed as readings');
+ assert(!button('Guardar y completar actividad'),'Simulator activities cannot be completed as readings');
  await click('Iniciar examen de la actividad');
  assert.deepEqual(requests.at(-1),{path:'/start',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-exam',mode:'exam'}},'A historical exam-only simulator uses the enrolled version modes, not its newer practice-only publication');
  assert.equal(simulatorStarted.id,'course-exam-attempt');

@@ -46,7 +46,17 @@ for(const pathway of [science,technical]){
  assert.equal(schoolReportSections(pathway).filter(section=>/recomendadas/.test(section.title)).length,1);
  assert.deepEqual(schoolSelection(pathway,false).options,[],'Unpublished or incomplete evidence cannot unlock a modality');
 }
-for(const suggested of ['ambas','pendiente',undefined,'unexpected']){
+const tied=schoolGuidance(scores({R:25,I:25}),evidence),tiedSelection=schoolSelection(tied);
+assert.equal(tiedSelection.modality,null,'Tied interests do not invent a winning modality');
+assert.equal(tiedSelection.comparison,true);
+assert.equal(tiedSelection.title,'Explora Ciencias y Técnico');
+assert.deepEqual(tiedSelection.options,[...tied.science,...tied.technical],'A modality tie retains the concrete options supported by interests');
+assert.equal(tiedSelection.groups.length,2);
+assert(tiedSelection.options.length>0&&tiedSelection.options.every(option=>option.evidence.length>0));
+assert.equal(schoolReportSections(tied).filter(section=>/para explorar/.test(section.title)).length,2);
+assert.deepEqual(schoolSelection(tied,false).options,[],'A tie cannot bypass completion and publication');
+assert.deepEqual(schoolSelection(schoolGuidance(scores({R:15,I:15,A:15,S:15,E:15,C:15}),evidence)).options,[],'An entirely undifferentiated profile still does not invent specific options');
+for(const suggested of ['pendiente',undefined,'unexpected']){
  const legacy={...technical,suggested};
  assert.equal(schoolSelection(legacy).modality,null);
  assert.equal(schoolSelection(legacy).title,'Modalidad por definir');

@@ -91,7 +91,7 @@ try{
  writeFileSync(resolve(folder,'report.json'),JSON.stringify(second));
  console.log('PASS server: separate school/university routes, graduation requires new university assessments, persisted profile, digest updates after review, authorized history and withheld results.');
  console.log('PDF fixture: '+pdfPath);
- if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')||process.argv.includes('--completion-visual')||process.argv.includes('--crud-visual')){
+ if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--activities-visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')||process.argv.includes('--completion-visual')||process.argv.includes('--crud-visual')){
   await db.prepare('DELETE FROM assessment_results WHERE submission_id=?').run('pending_test');
   await db.prepare('DELETE FROM submissions WHERE id=?').run('pending_test');
   const password=randomBytes(24).toString('base64url');
@@ -107,7 +107,7 @@ try{
   const runtime=await createRuntimePackage();
   const privateDir=mkdtempSync(resolve(tmpdir(),'rv360-http-'));
   const child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-H','127.0.0.1','-p',String(port)],{cwd:runtime,env:{...process.env,NODE_ENV:'production',APP_URL:base,COOKIE_SECURE:'false',
-    IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),
+    IMPORT_PATH:resolve(privateDir,'imports'),PROFILE_PHOTO_PATH:resolve(privateDir,'photos'),TRAINING_MEDIA_PATH:resolve(privateDir,'training-media'),
     ACADEMIC_CONTENT_PATH:resolve(privateDir,'academic.json'),GEMINI_API_KEY:db.driver==='mysql'?'isolated-ci-not-a-provider-key':'',
     SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM:'',SMTP_SECURE:'',
     API_ORIGIN:'',VERCEL:'',NEXT_PUBLIC_DESIGN_PREVIEW:''},stdio:'pipe',windowsHide:true});
@@ -171,6 +171,14 @@ try{
     console.log('PASS MySQL registration: failed profile write rolls back the account.');
     }
     const {spawnSync}=await import('node:child_process');const security=spawnSync(process.execPath,['scripts/test-security-http.mjs'],{env:{...process.env,APP_URL:base},stdio:'inherit',windowsHide:true});assert.equal(security.status,0,'Real MySQL HTTP security validation');
+   }
+   const {runTrainingMediaHttp}=await import('./test-training-media-http.mjs');
+   await runTrainingMediaHttp({base,adminCookie,studentCookie:cookie});
+   const {runActivityResponsesHttp}=await import('./test-activity-responses-http.mjs');
+   await runActivityResponsesHttp({request,cookie,adminCookie});
+   if(process.argv.includes('--activities-visual')){
+    const {runTrainingActivitiesVisual}=await import('./test-training-activities-visual.mjs');
+    await runTrainingActivitiesVisual({base,password,folder});
    }
    const {runValidationHttp}=await import('./test-validation-http.mjs');
    await runValidationHttp({request,cookie,adminCookie,password,db});

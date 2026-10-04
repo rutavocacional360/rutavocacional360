@@ -36,6 +36,8 @@ import { asyncSome } from "@/lib/server/async-collections";
 import { simulatorCareerIds } from "@/components/kit/lib/simulator-careers";
 import { courseContentKey, simulatorContentKey } from "@/components/kit/lib/training-content";
 import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,schoolModalityTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
+import { activityResponseProblem } from '@/components/kit/lib/activity-responses';
+import { validateActivityAttachments } from './training-media';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
 type User = {
@@ -179,6 +181,12 @@ async function validate(u: User, kind: string, e: any) {
     (!Array.isArray(e.areas) || !Array.isArray(e.careerIds))
   )
     fail("Estructura del perfil inválida.");
+  if (kind === 'course') {
+    if (e.activities.some((a: any) => !a || typeof a !== 'object' ||
+      (a.responsePrompt !== undefined && (typeof a.responsePrompt !== 'string' || a.responsePrompt.length > 5000))))
+      fail('La pregunta de una actividad admite hasta 5.000 caracteres.');
+    await validateActivityAttachments(u, e.activities);
+  }
   if (e.status !== "published") return;
   if (e.careerIds !== undefined && !Array.isArray(e.careerIds)) fail('Revisa las opciones de estudio.');
   if (e.educationLevel !== undefined && !['bachillerato','universidad'].includes(e.educationLevel)) fail('Revisa el nivel de preparación.');
@@ -364,7 +372,7 @@ async function validate(u: User, kind: string, e: any) {
         fail("El simulador debe corresponder a la misma convocatoria.");
     } else if (
       a.completion !== "read" ||
-      !a.content?.trim() ||
+      (!a.content?.trim() && !a.attachments?.length) ||
       (a.kind === "link" && !/^https:\/\//.test(a.content))
     )
       fail("Completa la lectura o un enlace HTTPS y confirmación de lectura.");
@@ -582,6 +590,7 @@ async function progress(e: any) {
     origin: JSON.parse(e.origin),
     progress: courseProgress(course.activities, done),
     completed: done,
+    responses: await document(e.user_id, 'training:activity-responses:' + e.id, {}),
     activityModes,
     next:
       course.activities.find((a) => a.required && !done.includes(a.id)) || null,
@@ -1069,6 +1078,31 @@ async function completeActivity(eid: string, aid: string, evidence: any) {
     )
     .run(eid, aid, JSON.stringify(evidence), now());
 }
+/** Store activity drafts separately from completion, scoped to the enrollment's
+ * immutable content. Per-activity revisions protect work in another browser tab. */
+export async function saveActivityResponse(u: User, b: any) {
+  student(u);
+  return await tx(async () => {
+    const e = await enrollment(u, b.enrollmentId), course = JSON.parse(e.snapshot) as Course;
+    const activity = course.activities.find(a => a.id === b.activityId);
+    if (!activity || activity.kind === 'simulator') fail('Actividad no válida.');
+    await requireCompletedAssessments(u, preparationLevel(course.careerIds, course.educationLevel));
+    if (typeof b.complete !== 'boolean' || !Number.isInteger(b.revision) || b.revision < 0)
+      fail('Estado de la respuesta inválido.');
+    const problem = activityResponseProblem(activity, b.answers, b.complete);
+    if (problem) fail(problem);
+    const key = 'training:activity-responses:' + e.id;
+    const responses = await document(e.user_id, key, {});
+    const previous = responses[activity.id];
+    if ((previous?.revision || 0) !== b.revision)
+      fail('Hay respuestas más recientes en otra sesión. Vuelve a abrir la actividad para recuperarlas.', 409);
+    if (previous?.submittedAt) fail('Esta actividad ya fue entregada. Tus respuestas están guardadas.', 409);
+    const response = { answers: b.answers, revision: b.revision + 1, updatedAt: now(), ...(b.complete ? {submittedAt: now()} : {}) };
+    await put(e.user_id, key, { ...responses, [activity.id]: response });
+    if (b.complete) await completeActivity(e.id, activity.id, { kind: 'activity-response', responseRevision: response.revision });
+    return { response, enrollment: await progress(e) };
+  });
+}
 async function applyProgress(a: any, r: any) {
   const e = (await db
       .prepare("SELECT * FROM training_enrollments WHERE id=?")
@@ -1448,9 +1482,14 @@ export async function trainingAction(
       );
     if (!a || a.kind === "simulator") fail("Actividad no válida.");
     await requireCompletedAssessments(u, preparationLevel(course.careerIds, course.educationLevel));
+    const responses = await document(e.user_id, 'training:activity-responses:' + e.id, {});
+    const responseProblem = activityResponseProblem(a, responses[a.id]?.answers || {}, true);
+    if (responseProblem) fail(responseProblem);
     await completeActivity(e.id, a.id, { kind: "confirmed-reading" });
     return await progress(e);
   }
+  if (path === 'training/activity-response' && method === 'PUT')
+    return await saveActivityResponse(u, b);
   if (path === "training/simulator/start" && method === "POST")
     return await startDirectSimulator(u, String(b.simulatorId), b.mode);
   if (path === "training/start" && method === "POST")

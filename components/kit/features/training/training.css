@@ -334,3 +334,12 @@
 .preparation-context{display:grid;gap:10px;min-width:0}.preparation-context p{max-width:75ch;margin:0;line-height:1.65}.preparation-context .text-link{justify-self:start;min-height:44px;display:inline-flex;align-items:center}
 
 .course-lesson-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin-block:1rem}.course-manager .training-module>summary{cursor:pointer;font-weight:700;padding-block:.75rem}.course-manager ol>li{margin-block:1rem}
+.activity-attachments{display:grid;gap:1rem;min-width:0}
+.activity-attachment{margin:0;min-width:0;padding:1rem;border:1px solid var(--border,#dce1ee);border-radius:12px;background:var(--surface,#fff)}
+.activity-attachment img,.activity-attachment video{display:block;width:auto;max-width:100%;max-height:480px;border-radius:8px;object-fit:contain;margin-inline:auto}
+.activity-attachment video{width:100%;background:#132033}
+.activity-attachment audio{width:100%;max-width:100%}
+.activity-attachment figcaption{display:flex;align-items:center;flex-wrap:wrap;gap:.75rem;margin-top:.75rem;overflow-wrap:anywhere}
+.activity-attachment figcaption>span{flex:1;min-width:0}
+.activity-attachment small{color:var(--muted,#5b6880)}
+.activity-media-editor input[type=file]{display:block;max-width:100%;margin-top:.5rem}

@@ -10,7 +10,7 @@ const folder=mkdtempSync(resolve('.qa-tools','guidance-normalization-'));
 process.env.DB_DRIVER='sqlite';process.env.DATABASE_PATH=resolve(folder,'synthetic.sqlite');
 process.env.ACADEMIC_CONTENT_PATH=resolve(folder,'academic.json');process.env.GUIDANCE_AI_ENABLED='false';
 const marker={name:'server-marker',setup(builder){builder.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));builder.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}};
-const oldRules={name:'prior-rules-fixture',setup(builder){builder.onLoad({filter:/[\\/]local-guidance\.ts$/},args=>({contents:readFileSync(args.path,'utf8').replace("'school-university-guidance-6'","'school-university-guidance-5'"),loader:'ts',resolveDir:dirname(args.path)}));}};
+const oldRules={name:'prior-rules-fixture',setup(builder){builder.onLoad({filter:/[\\/]local-guidance\.ts$/},args=>({contents:readFileSync(args.path,'utf8').replace("'school-university-guidance-7'","'school-university-guidance-6'").replace("input.educationLevel!=='universidad'&&JSON.parse(r.snapshot).educationLevel!=='universidad'","JSON.parse(r.snapshot).educationLevel==='bachillerato'"),loader:'ts',resolveDir:dirname(args.path)}));}};
 const contents="export {db,put} from './lib/server/store';export {ensureGuidance} from './lib/server/guidance';export {currentAssessments} from './lib/server/battery';export {calculateTest} from './components/kit/lib/test-engine';";
 for(const prior of [true,false])await build({stdin:{contents,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile:resolve(folder,prior?'prior.cjs':'current.cjs'),plugins:prior?[marker,oldRules]:[marker]});
 const require=createRequire(import.meta.url),prior=require(resolve(folder,'prior.cjs'));
@@ -26,13 +26,14 @@ try{
   }
   const test={id:'configured-school-criteria',stableId:'configured-school-criteria',version:'1',title:'Organización',schemaVersion:2,source:'Synthetic author criterion.',status:'Publicado',educationLevel:'bachillerato',audience:'selected',studentIds:[mapped.id],scoring:'dimensions',aggregation:'sum',dimensions:[{id:'organizacion',name:'Organización'}],options:[1,2,3].map(value=>({value,label:String(value),contributions:{organizacion:value}})),questions:[{id:'organization',text:'Organiza un proyecto.',type:'single',dimension:'organizacion'}],careerLinks:[{id:'school-accounting',careerId:'bachillerato:contabilidad',dimensionId:'organizacion',min:1,max:3,reason:'El criterio documentado invita a explorar gestión contable.',source:'Synthetic author criterion.'}]};
   await prior.put('institution:'+institutionId,'rv360:custom-tests',[test]);
-  await completeAssessment({db:prior.db,calculateTest:prior.calculateTest,userId:mapped.id,instrument:test,at:'2026-10-02T12:01:00Z'});
-  priorReport=await prior.ensureGuidance(mapped);assert.equal(priorReport.rulesVersion,'school-university-guidance-5');
+  await completeAssessment({db:prior.db,calculateTest:prior.calculateTest,userId:mapped.id,instrument:{...test,educationLevel:'ambos'},at:'2026-10-02T12:01:00Z'});
+  priorReport=await prior.ensureGuidance(mapped);assert.equal(priorReport.rulesVersion,'school-university-guidance-6');
+  assert.equal(priorReport.analysis.pathway.suggested,'pendiente','Prior rules lose the configured criteria in shared legacy snapshots');
 }catch(error){await prior.db.close();throw error;}
 const current=require(resolve(folder,'current.cjs'));
 try{
   const report=await current.ensureGuidance(mapped);
-  assert.equal(report.rulesVersion,'school-university-guidance-6');assert.notEqual(report.id,priorReport.id,'Changing the rules invalidates a persisted prior report with identical saved attempts');
+  assert.equal(report.rulesVersion,'school-university-guidance-7');assert.notEqual(report.id,priorReport.id,'Changing the rules invalidates a persisted prior report with identical saved attempts');
   assert.equal(report.readiness.bachillerato.ready,true);assert.equal(report.partial,false);assert.equal(report.analysis.pathway.suggested,'tecnico');
   assert.equal(report.analysis.pathway.basis,'configured_criteria');assert.equal(report.analysis.pathway.orientationState,'criteria');
   assert.equal(report.analysis.pathway.technical.length,1);assert.equal(report.analysis.pathway.technical[0].id,'contabilidad');

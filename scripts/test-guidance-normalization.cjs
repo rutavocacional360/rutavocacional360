@@ -91,6 +91,12 @@ assert.equal(mappedPath.technical.length,1);assert.equal(mappedPath.technical[0]
 assert.deepEqual(mappedPath.technical[0].evidence,['school-configured:dimension:organizacion']);
 assert.equal(mappedPath.technical[0].criteria[0].value,3);assert(mappedPath.technical[0].reason.includes('2 a 3'));
 assert.equal(mappedReport.analysis.recommendations.length,0,'School criteria must not become university recommendations');
+for(const educationLevel of ['ambos',undefined]){
+  const shared=submission({...mapped,educationLevel},{organizacion:3});
+  assert.equal(report([shared]).analysis.pathway.suggested,'tecnico','Published legacy shared tests retain their configured school recommendation');
+  assert.deepEqual(report([shared]).analysis.pathway.technical.map(option=>option.id),['contabilidad']);
+  assert.equal(report([shared],'universidad').analysis.pathway.technical.length,0,'A shared school criterion is not applied in the university route');
+}
 assert.equal(report([{...mappedRow,evaluation:{...mappedRow.evaluation,state:'pending-review'}}]).analysis.pathway.suggested,'pendiente','Pending review must not unlock criteria');
 assert.equal(report([{...mappedRow,resultReleased:false}]),null,'Unpublished results remain unavailable');
 assert.equal(report([submission(mapped,{organizacion:1})]).analysis.pathway.technical.length,0,'Scores outside author criteria must not fabricate a match');
@@ -103,5 +109,5 @@ const uniOnly=report([submission(core('sum','universidad'),{I:5})],'universidad'
 assert.deepEqual(uniOnly.analysis.highlightedDimensions,['I'],'Low tied dimensions must not be labeled as leading interests');
 assert(uniOnly.analysis.recommendations.length>0);assert(uniOnly.analysis.recommendations.every(r=>r.evidence.every(e=>e==='intereses:dimension:I')));
 assert(uniOnly.analysis.recommendations.every(r=>catalog.careers.find(c=>c.id===r.careerId).interests.includes('I')));
-assert.equal(GUIDANCE_RULES_VERSION,'school-university-guidance-6','Stored report digests must invalidate old rankings');
+assert.equal(GUIDANCE_RULES_VERSION,'school-university-guidance-7','Stored report digests must invalidate old rankings');
 console.log('PASS guidance normalization: original/custom sum/mean, weighted contributions, legacy bounds, reviewed values, mixed profiles, concrete school options, honest open profiles, explicit school criteria, university evidence and pending-result isolation.');

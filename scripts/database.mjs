@@ -17,6 +17,7 @@ try {
   }
 } catch (error) {
   console.error("Base de datos: " + (error.code || error.message));
+  if (error.code === "DATABASE_CONFIG_INVALID") console.error(error.message);
   process.exitCode = 1;
 } finally {
   await db.close();

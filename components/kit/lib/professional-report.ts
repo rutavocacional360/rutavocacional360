@@ -44,7 +44,7 @@ export async function professionalReport(r:any){
  write((r.historical?(ready?'Informe histórico completo':'Informe histórico parcial'):ready?'Informe completo':'Resultados parciales')+' · '+(r.progress?.submitted??items.length)+' de '+(r.progress?.total??items.length)+' tests con resultados publicados',9,true,purple,4);
  if(school&&pathway){
   const title=selection.title;
-  const reason=!ready?'Entrega los tests pendientes y espera la publicación de sus resultados para recibir tu orientación.':!selection.modality?'Tus tests están completos. Tus respuestas no dan prioridad a una sola modalidad. Revisa los resultados con tu orientador para definir tu siguiente paso.':completeText(pathway.reason);
+  const reason=!ready?'Entrega los tests pendientes y espera la publicación de sus resultados para recibir tu orientación.':!selection.modality&&!selection.comparison?'Tus tests están completos. Los resultados publicados necesitan revisión para relacionarlos con áreas o figuras de Bachillerato. Consulta los resultados por test con tu orientador.':completeText(pathway.reason);
   panel(title,reason);
   write('Esta orientación describe tu afinidad según tus respuestas; no certifica aptitud ni determina tu elección.',9,false,muted,4);
  }else panel(ready?(recommendations.length?'Carreras relacionadas con tus resultados':'Explora tus opciones con tu orientador'):'Resultado en preparación',ready?clean(r.analysis?.summary||'Los resultados publicados no priorizan una carrera todavía. Compara actividades y planes de estudio con tu orientador.'):'Completa los tests pendientes y espera la publicación de sus resultados para recibir orientación.');
@@ -57,7 +57,7 @@ export async function professionalReport(r:any){
   if(selection.rankingNote)write(selection.rankingNote,9,false,muted,4);
   const textHeight=(text:string,size:number,bold=false,gap=2)=>wrap(text,size,174,bold).length*(size*.43+1.3)+gap;
   const cardHeight=(option:any,title:string)=>{const support=evidence(option.evidence);return textHeight(title,12,true)+(option.family?textHeight('Familia: '+option.family,8.5):0)+textHeight('Por qué aparece: '+completeText(option.reason),9.5)+(option.subjects?textHeight('Contenidos para comparar: '+option.subjects,9.5):0)+(option.activity?textHeight('Prueba esta actividad: '+option.activity,9.5):0)+(support?textHeight('Respaldo de tus tests: '+support,8.5):0)+(!r.historical?13:0)+3;};
-  const groups=selection.modality?[{title:selection.optionsTitle,options:selection.options,description:selection.modality==='tecnico'?'Figuras del catálogo oficial. Confirma con tu colegio su oferta, talleres y requisitos.':'Son áreas para explorar dentro de esta modalidad; no son especializaciones oficiales del título.'}]:[];
+  const groups=selection.groups.map(group=>({...group,description:group.modality==='tecnico'?'Figuras del catálogo oficial. Confirma con tu colegio su oferta, talleres y requisitos.':'Son áreas para explorar dentro de esta modalidad; no son especializaciones oficiales del título.'}));
   let optionNumber=0;
   for(const group of groups){
    if(group.options.length)reserve(Math.min(230,5+textHeight(group.title,14,true,4)+textHeight(group.description,9,false,4)+cardHeight(group.options[0],(optionNumber+1)+'. '+group.options[0].name)));

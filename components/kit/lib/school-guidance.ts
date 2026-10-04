@@ -100,7 +100,7 @@ export function schoolReportSections(p: SchoolGuidance) {
   const selection=schoolSelection(p);
   return [
     {title:'1. Tu perfil de bachillerato',lines:[p.profile.stage,p.profile.baccalaureate,...(p.profile.specialty?[p.profile.specialty]:[]),p.profile.learningPreference,p.context,selection.title,p.reason]},
-    ...(selection.modality?[{title:'2. '+selection.optionsTitle,lines:selection.options.length?selection.options.flatMap((o,index)=>[(index+1)+'. '+o.name,o.reason,'Asignaturas y contenidos: '+o.subjects,'Actividad: '+o.activity,'Conexión universitaria: '+(o.careers.map(c=>c.name).join(', ')||'Consulta el catálogo y compara programas de esta área.')]):['No se prioriza una opción concreta dentro de esta modalidad. Revisa las asignaturas y actividades con tu orientador.']}]:[]),
-    {title:'3. Del bachillerato a la universidad',lines:[p.bridge,...p.nextSteps,...p.notes,...p.sources.map(s=>s.title+': '+s.url)]},
+    ...selection.groups.map((group,index)=>({title:(index+2)+'. '+group.title,lines:group.options.length?group.options.flatMap(o=>[(selection.options.indexOf(o)+1)+'. '+o.name,o.reason,'Asignaturas y contenidos: '+o.subjects,'Actividad: '+o.activity,'Conexión universitaria: '+(o.careers.map(c=>c.name).join(', ')||'Consulta el catálogo y compara programas de esta área.')]):['No se prioriza una opción concreta dentro de esta modalidad. Revisa las asignaturas y actividades con tu orientador.']})),
+    {title:(selection.groups.length+2)+'. Del bachillerato a la universidad',lines:[p.bridge,...p.nextSteps,...p.notes,...p.sources.map(s=>s.title+': '+s.url)]},
   ];
 }

@@ -37,7 +37,7 @@ export function validateProductionConfig(env, root = process.cwd()) {
   } catch { errors.push('APP_URL debe contener únicamente el origen del sitio.'); }
   required('GEMINI_API_KEY');
   const app = canonical(root);
-  for (const key of ['IMPORT_PATH','PROFILE_PHOTO_PATH','ACADEMIC_CONTENT_PATH']) {
+  for (const key of ['IMPORT_PATH','PROFILE_PHOTO_PATH','ACADEMIC_CONTENT_PATH', ...(env.TRAINING_MEDIA_PATH ? ['TRAINING_MEDIA_PATH'] : [])]) {
     required(key);
     if (!env[key]) continue;
     if (!isAbsolute(env[key])) { errors.push(key+' debe ser una ruta absoluta.'); continue; }

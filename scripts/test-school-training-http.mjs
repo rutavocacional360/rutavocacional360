@@ -29,9 +29,13 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
  const tiedReport=(await student('reports/guidance')).items.find(report=>!report.historical);
  assert.equal(tiedReport.analysis.pathway.suggested,'ambas','Equal R/I answers leave the modality unresolved');
  const tiedTraining=await student('training');
- assert.deepEqual(tiedTraining.recommendations,[],'A complete tied profile cannot unlock both school modalities');
- assert.equal(tiedTraining.simulators.length,0);
- await student('training/simulator/start',{simulatorId:lockedSimulator.id,mode:'practice'},'POST',403);
+ assert.deepEqual(tiedTraining.recommendations.map(item=>item.careerId),[...tiedReport.analysis.pathway.science,...tiedReport.analysis.pathway.technical].map(option=>'bachillerato:'+option.id),'A complete tied profile retains preparation for its concrete supported options');
+ assert(tiedTraining.recommendations.length>0);
+ assert(tiedTraining.simulators.some(simulator=>simulator.id===lockedSimulator.id));
+ const tiedAttempt=await student('training/simulator/start',{simulatorId:lockedSimulator.id,mode:'practice'});
+ assert(tiedAttempt.id,'The student can answer a simulator related to either supported modality');
+ await student('training/answers',{id:tiedAttempt.id,revision:0,answers:Object.fromEntries(lockedSimulator.questions.map(question=>[question.id,question.correctValues[0]])),flags:[]},'PUT');
+ const tiedFinished=await student('training/finish',{id:tiedAttempt.id});assert.equal(tiedFinished.result.percent,100,'A tied profile can save answers and finish its related preparation');
  const universityRecommendations=(await student('training')).recommendations.filter(r=>!r.careerId.startsWith('bachillerato:')).map(r=>r.careerId);assert.deepEqual(universityRecommendations,[]);
 
  await admin('training/delete-simulator',{kind:'simulator',id:lockedSimulator.id,version:lockedSimulator.version,revision:lockedSimulator.revision});

@@ -5,7 +5,7 @@ import { schoolGuidance, type SchoolRelation } from './school-guidance';
 import { pathwayVersion, type SchoolProfile } from '../data/baccalaureate';
 import { guidanceScores } from './guidance-scores';
 
-export const GUIDANCE_RULES_VERSION = 'school-university-guidance-6';
+export const GUIDANCE_RULES_VERSION = 'school-university-guidance-7';
 type GuidanceInput = { educationLevel?:'bachillerato'|'universidad'; catalog?: typeof defaultCatalog; content?: {id:string;source:string;model:string|null;areas:typeof defaultContent.areas;categories:typeof defaultContent.categories}; profile?:SchoolProfile };
 
 /** The same saved answers drive the screen, PDF and course recommendations. */
@@ -52,7 +52,9 @@ export function localGuidance(user:any,submissions:any[],assignedIds:string[]=['
  }
  recommendations.sort((a,b)=>Number(explicitIds.has(b.careerId))-Number(explicitIds.has(a.careerId)));
  const schoolScores=schoolInterests.length?codes.map(dimension=>({dimension,raw:5+20*schoolInterests.reduce((sum,s)=>{const v=s.scores.find((v:any)=>v.dimension===dimension)!;return sum+(v.value-v.min)/(v.max-v.min);},0)/schoolInterests.length})):[];
- const schoolRelations:SchoolRelation[]=rows.filter(r=>r.evaluation?.state==='complete'&&JSON.parse(r.snapshot).educationLevel==='bachillerato').flatMap(row=>(row.evaluation?.careers||[]).flatMap((rec:any)=>{
+ // Legacy shared snapshots keep the criteria saved with the student's attempt.
+ // The server resolves their original route before passing them to this engine.
+ const schoolRelations:SchoolRelation[]=rows.filter(r=>r.evaluation?.state==='complete'&&input.educationLevel!=='universidad'&&JSON.parse(r.snapshot).educationLevel!=='universidad').flatMap(row=>(row.evaluation?.careers||[]).flatMap((rec:any)=>{
    const id=rec.careerId||rec.id,score=instruments.find(t=>t.id===row.id)?.scores.find(v=>v.dimension===rec.dimensionId);
    if(typeof id!=='string'||!id.startsWith('bachillerato:')||!score||!Number.isFinite(score.value)||!Number.isFinite(rec.min)||!Number.isFinite(rec.max)||rec.min>rec.max||score.value<rec.min||score.value>rec.max||typeof rec.reason!=='string'||!rec.reason.trim())return [];
    return [{optionId:id.slice('bachillerato:'.length),reason:rec.reason,evidence:[row.instrument_id+':dimension:'+rec.dimensionId],dimensionId:rec.dimensionId,value:score.value,min:rec.min,max:rec.max}];
