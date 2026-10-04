@@ -91,7 +91,7 @@ try{
  writeFileSync(resolve(folder,'report.json'),JSON.stringify(second));
  console.log('PASS server: separate school/university routes, graduation requires new university assessments, persisted profile, digest updates after review, authorized history and withheld results.');
  console.log('PDF fixture: '+pdfPath);
- if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')){
+ if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')||process.argv.includes('--completion-visual')){
   await db.prepare('DELETE FROM assessment_results WHERE submission_id=?').run('pending_test');
   await db.prepare('DELETE FROM submissions WHERE id=?').run('pending_test');
   const password=randomBytes(24).toString('base64url');
@@ -184,6 +184,10 @@ try{
    if(process.argv.includes('--visual')){
     const {runGuidanceVisual}=await import('./test-guidance-visual.mjs');
     await runGuidanceVisual({base,password,folder,schoolPracticeTemplate});
+   }
+   if(process.argv.includes('--completion-visual')){
+    const {runAdminCompletionVisual}=await import('./test-admin-completion-visual.mjs');
+    await runAdminCompletionVisual({base,password,folder});
    }
    if(process.argv.includes('--admin-visual')){
     const {runAdminImportVisual}=await import('./test-admin-import-visual.mjs');

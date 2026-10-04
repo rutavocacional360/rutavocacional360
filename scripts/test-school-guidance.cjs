@@ -2,6 +2,7 @@ const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert
 require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
 const {schoolGuidance,schoolReportSections}=require('../components/kit/lib/school-guidance.ts');
 const {schoolProfile}=require('../components/kit/data/baccalaureate.ts');
+const {schoolSelection}=require('../components/kit/lib/school-selection.ts');
 const codes=['R','I','A','S','E','C'];
 const scores=patch=>codes.map(d=>({dimension:d,raw:patch[d]??10}));
 const evidence=codes.map(d=>'intereses:dimension:'+d);
@@ -35,6 +36,24 @@ assert.throws(()=>schoolProfile({learningPreference:'invalid'}));
 assert.throws(()=>schoolProfile({specialty:'x'.repeat(141)}));
 assert.throws(()=>schoolProfile({stage:{}}));
 const sections=schoolReportSections(technical);
+for(const pathway of [science,technical]){
+ const raw=JSON.stringify(pathway),selected=schoolSelection(pathway);
+ assert.equal(selected.modality,pathway.suggested);
+ assert.deepEqual(selected.options,pathway.suggested==='tecnico'?pathway.technical:pathway.science);
+ const visibleCount=selected.options.length===1?'Se muestra 1 '+(selected.modality==='tecnico'?'figura':'área'):'Se muestran '+selected.options.length+(selected.modality==='tecnico'?' figuras':' áreas');
+ assert(selected.rankingNote.includes(visibleCount),'The displayed count belongs only to the selected modality');
+ assert.equal(JSON.stringify(pathway),raw,'Selecting a modality never mutates stored evidence');
+ assert.equal(schoolReportSections(pathway).filter(section=>/recomendadas/.test(section.title)).length,1);
+ assert.deepEqual(schoolSelection(pathway,false).options,[],'Unpublished or incomplete evidence cannot unlock a modality');
+}
+for(const suggested of ['ambas','pendiente',undefined,'unexpected']){
+ const legacy={...technical,suggested};
+ assert.equal(schoolSelection(legacy).modality,null);
+ assert.equal(schoolSelection(legacy).title,'Modalidad por definir');
+ assert.deepEqual(schoolSelection(legacy).options,[]);
+ assert.equal(schoolSelection(legacy).rankingNote,null,'An unresolved modality cannot claim to show ranked options');
+ assert.equal(schoolReportSections(legacy).filter(section=>/recomendadas/.test(section.title)).length,0);
+}
 assert(sections[0].title.includes('perfil'));
 assert(sections.some(s=>s.lines.some(l=>l.includes('Ingeniería de Software'))));
 assert(sections.at(-1).lines.some(l=>l.includes('requisitos')));

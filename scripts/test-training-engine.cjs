@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm');
 function load(file,deps={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:m.exports,module:m,require:id=>deps[id]||require(id),console});return m.exports;}
-const schoolTraining=load('components/kit/data/school-training.ts',{'./baccalaureate':{scienceOptions:[],technicalOptions:[]}});
+const schoolTraining=load('components/kit/data/school-training.ts',{'./baccalaureate':{scienceOptions:[],technicalOptions:[]},'../lib/school-selection':load('components/kit/lib/school-selection.ts')});
 const universal=load('components/kit/lib/test-engine.ts'),{academicInstrument,academicResult,simulatorProblems,selectQuestions,principalGrade,courseProgress}=load('components/kit/lib/training-engine.ts',{'../data/school-training':schoolTraining,'./test-engine':universal});
 const {matchesCourseProfile,courseUniversityProblem}=load('components/kit/lib/course-links.ts');
 const admission={type:'admission',profileId:'university-period',profileVersion:1};

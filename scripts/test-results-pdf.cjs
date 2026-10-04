@@ -21,7 +21,7 @@ const report = {
     answers:Object.fromEntries(questions.map((question,index) => [question.id,'Respuesta guardada '+(index+1)+': Me interesa investigar problemas, experimentar y compartir los resultados de proyectos escolares.'])),scores:[]}],
   analysis:{summary:'Tus respuestas permiten explorar proyectos científicos y comparar las opciones de bachillerato.',highlightedDimensions:['I'],recommendations:[],nextSteps:['Compara asignaturas y proyectos con tu orientador.'],limitations:[],
     pathway:{profile,suggested:'ciencias',reason:'Tus experiencias muestran interés por investigar y explicar cómo funcionan las cosas.',
-      science:[{id:'ciencias',name:'Ciencias experimentales',reason:'Te interesa resolver preguntas mediante experimentos.',subjects:'Biología, química y física.',activity:'Prepara un experimento y registra lo que observas.',evidence:[]}],technical:[],nextSteps:['Compara asignaturas y proyectos con tu orientador.'],notes:[],sources:[]}}
+      science:[{id:'ciencias-exactas',name:'Ciencias experimentales',reason:'Te interesa resolver preguntas mediante experimentos.',subjects:'Biología, química y física.',activity:'Prepara un experimento y registra lo que observas.',evidence:[]}],technical:[],nextSteps:['Compara asignaturas y proyectos con tu orientador.'],notes:[],sources:[]}}
 };
 
 async function main() {

@@ -39,40 +39,52 @@ try{
  assert(!html.includes('NaN'));
  assert(html.includes('class="rd-option-number" aria-label="Opción 1">1</span>'),'School cards use visible numbered options');
  const optionNumbers=markup=>Array.from(markup.matchAll(/class="rd-option-number" aria-label="Opción (\d+)">(\d+)<\/span>/g),match=>{assert.equal(match[1],match[2]);return Number(match[1]);});
- assert.deepEqual(optionNumbers(html),Array.from({length:pathway.science.length+pathway.technical.length},(_,index)=>index+1),'School numbering continues across both modality groups, including ties');
+ assert.deepEqual(optionNumbers(html),Array.from({length:pathway.technical.length},(_,index)=>index+1),'Only the selected modality is numbered continuously');
  assert(!html.includes('Por qué aparece en tus resultados'),'Detailed reasons use the named dialog action instead of repeated disclosures in every card');
- for(const option of [...pathway.science,...pathway.technical]){
+ for(const option of pathway.technical){
   const technical=pathway.technical.some(item=>item.id===option.id);
   assert(html.includes('aria-label="'+(technical?'Conocer la figura: ':'Conocer el área: ')+option.name+'"'),'Each school option has a named detail action');
  }
  assert(html.includes('Modalidad recomendada: Bachillerato Técnico'));
  const renderPath=(p,readiness=ready)=>render(BaccalaureateResult,{pathway:p,readiness});
- assert(renderPath({...pathway,suggested:'ciencias'}).includes('Modalidad recomendada: Bachillerato en Ciencias'));
- assert(renderPath({...pathway,suggested:'ambas'}).includes('Afinidad con ambas modalidades'));
+ const scienceHtml=renderPath({...pathway,suggested:'ciencias'});
+ assert(scienceHtml.includes('Modalidad recomendada: Bachillerato en Ciencias'));
+ assert.deepEqual(optionNumbers(scienceHtml),pathway.science.map((_,index)=>index+1));
+ assert(!scienceHtml.includes('aria-label="Conocer la figura:')&&!html.includes('aria-label="Conocer el área:'),'The alternative modality has no recommendation cards');
+ for(const markup of [html,scienceHtml]){
+  assert.equal(markup.split('class="bp-group bp-preferred"').length-1,1,'Exactly one option group is presented');
+  assert(!/<h3>Bachillerato (en Ciencias|Técnico)<\/h3>/.test(markup),'The modality title is not repeated above the options');
+ }
+ const tiedHtml=renderPath({...pathway,suggested:'ambas'});
+ assert(tiedHtml.includes('Modalidad por definir'));
+ assert.deepEqual(optionNumbers(tiedHtml),[],'A tied legacy report must not choose a winner or render either candidate list');
+ assert(!tiedHtml.includes('/mi-ruta/cursos?carrera=')&&!tiedHtml.includes('Continuar mis tests'));
  const pending=renderPath(pathway,{ready:false,total:3,completed:1,pending:[{id:'a',title:'Intereses pendientes',state:'not_started'},{id:'b',title:'Resultados por publicar',state:'awaiting_results'}]});
- for(const label of ['Resultado pendiente: Técnico o Ciencias','1 de 3','Intereses pendientes','Pendiente de publicación','Continuar mis tests'])assert(pending.includes(label),label);
+ for(const label of ['Modalidad por definir','1 de 3','Intereses pendientes','Pendiente de publicación','Continuar mis tests'])assert(pending.includes(label),label);
  assert(!pending.includes('Modalidad recomendada:'));
  assert(pending.includes('34 figuras en 11 familias'),'The full official catalog is available separately from recommendations');
  assert(pending.includes('Bachillerato Complementario en Artes'));
  assert(!pending.includes('/mi-ruta/cursos?carrera='),'Incomplete tests must not link to personalized preparation');
  const preparationHref=id=>'/mi-ruta/cursos?carrera='+encodeURIComponent(id);
- for(const option of [...pathway.science,...pathway.technical]){
+ for(const option of pathway.technical){
   const href=preparationHref('bachillerato:'+option.id);
   assert(html.includes('<a class="bp-option-title" href="'+href+'">'+option.name+'</a>'),option.name+' title opens its preparation');
   assert.equal(html.split('href="'+href+'"').length-1,2,option.name+' title and CTA share the same preparation target');
  }
- assert(html.indexOf('aria-label="Bachillerato Técnico"')<html.indexOf('aria-label="Bachillerato en Ciencias"'),'Recommended technical modality appears first');
+ assert(html.includes('aria-label="Figuras recomendadas"')&&!html.includes('aria-label="Áreas recomendadas"'),'Only technical figures are recommended');
  assert(!html.includes('href="'+preparationHref('bachillerato:tecnico')+'"')&&!html.includes('href="'+preparationHref('bachillerato:ciencias')+'"'),'Modalities never link to preparation as if they were specific study options');
  const open=renderPath({...pathway,suggested:'ambas',science:[],technical:[]});
  assert(!/Sin áreas priorizadas|Completa tus intereses/.test(open),'Complete open profiles do not ask students to repeat completed tests');
- assert(open.includes('Tus respuestas no dan prioridad'));
+ assert(open.includes('Tus respuestas no dan prioridad a una sola modalidad'));
  assert(!open.includes('/mi-ruta/cursos?carrera='),'Open profiles without specific options use the reference catalog instead of modality course links');
  const review=renderPath({...pathway,suggested:'pendiente',science:[],technical:[]});
- assert(review.includes('Tests completos: orientación por revisar'));
+ assert(review.includes('Modalidad por definir'));
  assert(!review.includes('Resultado pendiente:')&&!review.includes('Continuar mis tests')&&!review.includes('/mi-ruta/cursos?carrera='),'Unmapped complete tests need review, not false incompletion or preparation unlock');
  for(const figure of technicalOptions)assert(pending.includes(figure.name),figure.name+' missing from the reference catalog');
  globalThis.__guidanceTestRole='admin';
  assert(!render(BaccalaureateResult,{pathway}).includes('/mi-ruta/perfil'));
+ assert.deepEqual(optionNumbers(renderPath(pathway)),pathway.technical.map((_,index)=>index+1),'Admin shows the same single modality');
+ assert.deepEqual(optionNumbers(renderPath({...pathway,suggested:'ambas'})),[],'Admin cannot turn a tie into two recommendations');
 
  const historySubmission=(id,title,educationLevel)=>({id,version:'1',created_at:'2026-10-02T12:00:00Z',snapshot:JSON.stringify({id,educationLevel,title,questions:[],options:[]}),answers:'{}',scores:'[]',resultReleased:true});
  globalThis.__guidanceTestRole='student';

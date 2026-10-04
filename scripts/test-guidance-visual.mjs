@@ -27,6 +27,45 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   assert.equal(await cards.locator('.rd-offer-details').count(),0,name+': extended information opens in the option dialog');
   checks.push({name,options:expected,numbering:'1..'+expected});
  }
+ async function singleSchoolModality(page,modality,expected,name){
+  const region=page.getByRole('region',{name:'Orientación de bachillerato',exact:true});
+  await numberedOptions(region,expected,name);
+  assert.equal(await region.locator('.bp-group').count(),modality?1:0,name+': only the selected modality has an option group');
+  assert.equal(await region.locator('.bp-group-heading h3').filter({hasText:/Bachillerato/}).count(),0,name+': the top modality heading is not repeated');
+  if(modality){
+   assert.equal(await region.getByRole('button',{name:modality==='ciencias'?/Conocer la figura/:/Conocer el área/}).count(),0,name+': no alternative modality cards');
+  }else{
+   await region.getByRole('heading',{name:'Modalidad por definir',exact:true}).waitFor();
+   assert.equal(await region.locator('a[href*="/mi-ruta/cursos?"]').count(),0,name+': a tie never chooses preparation');
+  }
+ }
+ async function schoolVariants(context,report){
+  for(const suggested of ['tecnico','ambas']){
+   const variant=structuredClone(report);variant.analysis.pathway.suggested=suggested;
+   variant.analysis.pathway.reason=suggested==='tecnico'?'Las respuestas de esta prueba visual priorizan actividades técnicas.':'La evidencia de esta prueba visual no prioriza una sola modalidad.';
+   variant.analysis.summary=variant.analysis.pathway.reason;
+   variant.analysis.pathway.nextSteps=[suggested==='tecnico'?'Compara las figuras recomendadas y visita sus talleres con tu orientador.':'Revisa los resultados con tu orientador para definir tu siguiente paso.'];
+   variant.analysis.nextSteps=variant.analysis.pathway.nextSteps;
+   const variantPage=await context.newPage();
+   variantPage.on('pageerror',error=>failures.push({name:'Variante escolar '+suggested,message:error.message}));
+   // Isolated response fixtures exercise old reports with both raw arrays; stored results are unchanged.
+   await variantPage.route('**/api/reports/guidance',route=>route.fulfill({json:{items:[variant],configured:false}}));
+   try{
+    for(const width of [1440,375]){
+     await variantPage.setViewportSize({width,height:900});await variantPage.goto(base+'/mi-ruta/resultados');
+     await variantPage.getByRole('heading',{name:suggested==='tecnico'?'Modalidad recomendada: Bachillerato Técnico':'Modalidad por definir',exact:true}).waitFor();
+     await singleSchoolModality(variantPage,suggested==='tecnico'?'tecnico':null,suggested==='tecnico'?variant.analysis.pathway.technical.length:0,suggested+' '+width);
+     await shot(variantPage,'resultados-'+suggested+'-'+width);await overflow(variantPage,'resultados-'+suggested+'-'+width);
+    }
+    if(suggested==='tecnico'){
+     await variantPage.getByRole('button',{name:/Conocer la figura/}).first().click();
+     await variantPage.getByRole('dialog').getByRole('heading',{name:'Una actividad para probar',exact:true}).waitFor();
+     await shot(variantPage,'figura-dialogo-movil');await overflow(variantPage,'figura-dialogo-movil');await variantPage.keyboard.press('Escape');
+    }
+    await reportPdf(variantPage,'pdf-bachillerato-'+suggested);
+   }finally{await variantPage.close();}
+  }
+ }
  async function reportPdf(page,name,downloadFile=true){
   await page.getByRole('button',{name:'Informe PDF',exact:true}).click();
   const viewer=page.locator('.rd-document'),downloadLink=viewer.getByRole('link',{name:'Descargar PDF',exact:true});
@@ -145,9 +184,10 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   const schoolRegion=page.getByRole('region',{name:'Orientación de bachillerato',exact:true});
   const schoolReport=(await (await page.request.get(base+'/api/reports/guidance')).json()).items.find(r=>!r.historical&&r.educationLevel==='bachillerato');
   assert(schoolReport?.analysis.pathway);
-  const schoolCount=schoolReport.analysis.pathway.science.length+schoolReport.analysis.pathway.technical.length;
-  assert(schoolReport.analysis.pathway.science.length&&schoolReport.analysis.pathway.technical.length,'The fixture covers consecutive numbering across both school groups');
-  await numberedOptions(schoolRegion,schoolCount,'Bachillerato escritorio');
+  const schoolCount=schoolReport.analysis.pathway.science.length;
+  assert(schoolCount&&schoolReport.analysis.pathway.technical.length,'The raw fixture retains both modalities to verify only the recorded recommendation is shown');
+  await singleSchoolModality(page,'ciencias',schoolCount,'Bachillerato escritorio');
+  await schoolVariants(context,schoolReport);
   assert.equal(await page.locator('.rd-next[open]').count(),0,'Long next-step guidance starts collapsed');
   await reportHistory(page,'bachillerato');
   await magnifiedReport('bachillerato',schoolCount);
@@ -159,13 +199,10 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   await page.getByRole('dialog').getByRole('heading',{name:'Qué estudiar y reforzar',exact:true}).waitFor();
   assert((await page.getByRole('dialog').innerText()).includes(schoolReport.analysis.pathway.science[0].subjects),'The area dialog preserves its study subjects');
   await shot(page,'area-dialogo');await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:/Conocer la figura/}).first().click();await page.getByRole('dialog').waitFor();
-  await page.getByRole('dialog').getByRole('heading',{name:'Una actividad para probar',exact:true}).waitFor();
-  await shot(page,'figura-dialogo');await page.keyboard.press('Escape');
   for(const width of [375,390,768,1280]){
    await page.setViewportSize({width,height:900});
    await page.goto(base+'/mi-ruta/resultados');await page.getByRole('heading',{name:schoolHeading,exact:true}).waitFor();
-   await numberedOptions(schoolRegion,schoolCount,'Bachillerato '+width);
+   await singleSchoolModality(page,'ciencias',schoolCount,'Bachillerato '+width);
    await shot(page,'resultados-'+width);await overflow(page,'resultados-'+width);
    if(width===390){
     await page.getByRole('button',{name:/Conocer el área/}).first().click();await page.getByRole('dialog').waitFor();
@@ -234,7 +271,11 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   await page.goto(base+'/mi-ruta/resultados');await page.getByRole('heading',{name:schoolHeading,exact:true}).waitFor();
   await ap.setViewportSize({width:1440,height:1000});await ap.reload();
   await ap.getByLabel('Buscar estudiante',{exact:true}).fill('test@example.test');await ap.getByRole('button',{name:'Ver ficha de Estudiante Prueba'}).click();
+  await ap.getByRole('heading',{name:schoolHeading,exact:true}).waitFor();
+  await singleSchoolModality(ap,'ciencias',schoolCount,'Admin resumen Bachillerato');
+  await shot(ap,'admin-resumen-bachillerato');await overflow(ap,'admin-resumen-bachillerato');
   await ap.getByRole('button',{name:'Bachillerato',exact:true}).click();await ap.getByRole('heading',{name:schoolHeading,exact:true}).waitFor();
+  await singleSchoolModality(ap,'ciencias',schoolCount,'Admin Bachillerato');
   assert.equal(await ap.getByRole('button',{name:'Universidad',exact:true}).count(),0);
   await shot(ap,'admin-escritorio');await overflow(ap,'admin-escritorio');
   await ap.setViewportSize({width:390,height:844});await shot(ap,'admin-movil');await overflow(ap,'admin-movil');
@@ -271,6 +312,7 @@ export async function runGuidanceVisual({base,password,folder,schoolPracticeTemp
   const modalityIds=['bachillerato:ciencias','bachillerato:tecnico'];
   assert(schoolTraining.recommendations.length>0);
   assert(schoolTraining.recommendations.every(item=>!modalityIds.includes(item.careerId)),'Courses recommend specific areas and technical figures only');
+  assert.deepEqual(schoolTraining.recommendations.map(item=>item.careerId),schoolReport.analysis.pathway.science.map(option=>'bachillerato:'+option.id),'Course options match only the selected school modality');
   assert(schoolTraining.careers.every(item=>!modalityIds.includes(item.id)),'Student course catalog omits general modalities');
   for(const name of ['Bachillerato en Ciencias','Bachillerato Técnico'])assert.equal(await page.getByRole('heading',{name,exact:true}).count(),0,'No general modality card: '+name);
   await shot(page,'estudiante-opciones-bachillerato');await overflow(page,'estudiante-opciones-bachillerato');

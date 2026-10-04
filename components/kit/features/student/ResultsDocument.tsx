@@ -67,7 +67,7 @@ export function GuidanceDocument({report}:{report:any}){
   <details className="rd-footnotes rd-disclosure"><summary>Detalles y próximos pasos</summary><div className="rd-details-content">
    {!!nextSteps.length&&<section className="rd-next"><h3>Recomendaciones para avanzar</h3><ol>{nextSteps.map(step=><li key={step}>{step}</li>)}</ol></section>}
    {!!report.analysis?.selfReported?.length&&<section><h3>Lo que valoras al elegir</h3>{report.analysis.selfReported.map((value:any,index:number)=><p key={index}>{value.text}</p>)}</section>}
-   {school&&ready&&report.analysis?.pathway&&report.analysis.pathway.suggested!=='pendiente'&&<BaccalaureateReference pathway={report.analysis.pathway}/>}
+   {school&&report.analysis?.pathway&&<BaccalaureateReference pathway={report.analysis.pathway}/>}
    <section><h3>Cómo interpretar este informe</h3><p>Los tests orientan tus intereses y preferencias; no certifican aptitud ni garantizan el éxito en una carrera.</p>{!school&&<p>Los números identifican las opciones; no son una nota ni un porcentaje de aptitud.</p>}{reportLimitations(report.analysis?.limitations).map((limitation:string)=><p key={limitation}>{limitation}</p>)}</section>
    {!school&&<CatalogContext report={report}/>}
    <section><h3>Información del informe guardado</h3><p>Versión {report.version} · {date(report.createdAt)} · Referencia {report.id}</p></section>

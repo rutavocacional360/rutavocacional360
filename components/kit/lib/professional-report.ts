@@ -6,6 +6,7 @@ import {visibleQuestions} from './test-engine';
 import {versionLabel} from './version';
 import {jsPDF} from 'jspdf';
 import {dimensions} from '../data/instruments';
+import {schoolSelection} from './school-selection';
 
 const dimensionName=(code:string)=>dimensions.find(d=>d.code===code)?.name||code;
 const preparationUrl=(id:string)=>'https://rutavocacional360.com/mi-ruta/cursos?carrera='+encodeURIComponent(id);
@@ -19,7 +20,7 @@ export async function professionalReport(r:any){
  const pathway=school?r.analysis?.pathway:undefined;
  const ready=r.readiness?.[educationLevel]?.ready??r.partial!==true;
  const recommendations:any[]=school?[]:(r.analysis?.recommendations||[]).filter((rec:any)=>!String(rec.careerId).startsWith('bachillerato:'));
- const science:any[]=ready?pathway?.science||[]:[],technical:any[]=ready?pathway?.technical||[]:[];
+ const selection=schoolSelection(pathway,ready);
  const questionsOf=(item:any)=>visibleQuestions(item.instrument,item.answers||{}).filter(q=>q.type!=='info');
  const answerCount=items.reduce((n,item)=>n+questionsOf(item).filter(q=>item.answers?.[q.id]!==undefined&&item.answers[q.id]!==null&&item.answers[q.id]!=='').length,0);
  const pdf=new jsPDF({unit:'mm',format:'a4'});let y=40;
@@ -42,23 +43,21 @@ export async function professionalReport(r:any){
  header();write(school?'Tu orientación de Bachillerato':'Tu orientación universitaria',21,true);write(r.student?.name||'Mi informe',12,true);write(new Date(r.createdAt).toLocaleString('es-EC')+' · Informe '+r.version,8.5,false,muted,3);
  write((r.historical?(ready?'Informe histórico completo':'Informe histórico parcial'):ready?'Informe completo':'Resultados parciales')+' · '+(r.progress?.submitted??items.length)+' de '+(r.progress?.total??items.length)+' tests con resultados publicados',9,true,purple,4);
  if(school&&pathway){
-  const suggested=ready?pathway.suggested:'pendiente';
-  const title=suggested==='ciencias'?'Bachillerato en Ciencias':suggested==='tecnico'?'Bachillerato Técnico':suggested==='ambas'?'Ciencias y Técnico: ambas modalidades':'pendiente'===suggested&&ready?'Tests completos: orientación por revisar':'Resultado en preparación';
-  const reason=!ready?'Entrega los tests pendientes y espera la publicación de sus resultados para recibir tu orientación.':suggested==='pendiente'?'Tus tests están completos, pero los resultados publicados no permiten priorizar una modalidad. Compara las experiencias de Ciencias y Técnico con tu orientador.':completeText(pathway.reason);
+  const title=selection.title;
+  const reason=!ready?'Entrega los tests pendientes y espera la publicación de sus resultados para recibir tu orientación.':!selection.modality?'Tus tests están completos. Tus respuestas no dan prioridad a una sola modalidad. Revisa los resultados con tu orientador para definir tu siguiente paso.':completeText(pathway.reason);
   panel(title,reason);
   write('Esta orientación describe tu afinidad según tus respuestas; no certifica aptitud ni determina tu elección.',9,false,muted,4);
  }else panel(ready?(recommendations.length?'Carreras relacionadas con tus resultados':'Explora tus opciones con tu orientador'):'Resultado en preparación',ready?clean(r.analysis?.summary||'Los resultados publicados no priorizan una carrera todavía. Compara actividades y planes de estudio con tu orientador.'):'Completa los tests pendientes y espera la publicación de sus resultados para recibir orientación.');
- reserve(20);const stats=[['TESTS',items.length],['RESPUESTAS',answerCount],['OPCIONES RELACIONADAS',school?science.length+technical.length:recommendations.length]];for(let i=0;i<stats.length;i++){const x=18+i*59;pdf.setFillColor(248,249,253);pdf.roundedRect(x,y,55,17,2,2,'F');font(7.5,false,muted);pdf.text(String(stats[i][0]),x+4,y+5);font(12,true);pdf.text(String(stats[i][1]),x+4,y+12);}y+=24;
+ reserve(20);const stats=[['TESTS',items.length],['RESPUESTAS',answerCount],['OPCIONES RELACIONADAS',school?selection.options.length:recommendations.length]];for(let i=0;i<stats.length;i++){const x=18+i*59;pdf.setFillColor(248,249,253);pdf.roundedRect(x,y,55,17,2,2,'F');font(7.5,false,muted);pdf.text(String(stats[i][0]),x+4,y+5);font(12,true);pdf.text(String(stats[i][1]),x+4,y+12);}y+=24;
  const summary=clean(r.analysis?.summary);if(school&&summary&&!/univers|educación superior/i.test(summary)&&summary!==clean(pathway?.reason)&&summary!==clean(pathway?.title)&&summary!==clean(pathway?.title+'. '+pathway?.reason))write(summary);
  if(r.historical){write('Esta copia conserva los resultados de su fecha. Consulta tu orientación actual antes de elegir cursos o autopreparación.',9,false,muted);link('Ver mi orientación actual','https://rutavocacional360.com/mi-ruta/resultados');}
  const top=(school?pathway?.highlightedDimensions||r.analysis?.highlightedDimensions||[]:r.analysis?.highlightedDimensions||[]).map(dimensionName);if(ready&&top.length)write('Intereses destacados en tu orientación: '+top.join(', ')+'.',10,true);
 
  if(school&&pathway){
-  if(ready&&pathway.rankingNote)write(pathway.rankingNote,9,false,muted,4);
+  if(selection.rankingNote)write(selection.rankingNote,9,false,muted,4);
   const textHeight=(text:string,size:number,bold=false,gap=2)=>wrap(text,size,174,bold).length*(size*.43+1.3)+gap;
   const cardHeight=(option:any,title:string)=>{const support=evidence(option.evidence);return textHeight(title,12,true)+(option.family?textHeight('Familia: '+option.family,8.5):0)+textHeight('Por qué aparece: '+completeText(option.reason),9.5)+(option.subjects?textHeight('Contenidos para comparar: '+option.subjects,9.5):0)+(option.activity?textHeight('Prueba esta actividad: '+option.activity,9.5):0)+(support?textHeight('Respaldo de tus tests: '+support,8.5):0)+(!r.historical?13:0)+3;};
-  const groups=[{title:'Áreas de Ciencias relacionadas',options:science,description:'Son áreas para explorar dentro de Ciencias; no son especializaciones oficiales del título.'},{title:'Figuras de Bachillerato Técnico relacionadas',options:technical,description:'Figuras del catálogo oficial. Confirma con tu colegio su oferta, talleres y requisitos.'}];
-  if(pathway.suggested==='tecnico')groups.reverse();
+  const groups=selection.modality?[{title:selection.optionsTitle,options:selection.options,description:selection.modality==='tecnico'?'Figuras del catálogo oficial. Confirma con tu colegio su oferta, talleres y requisitos.':'Son áreas para explorar dentro de esta modalidad; no son especializaciones oficiales del título.'}]:[];
   let optionNumber=0;
   for(const group of groups){
    if(group.options.length)reserve(Math.min(230,5+textHeight(group.title,14,true,4)+textHeight(group.description,9,false,4)+cardHeight(group.options[0],(optionNumber+1)+'. '+group.options[0].name)));
@@ -87,7 +86,7 @@ export async function professionalReport(r:any){
   }
  }
  section('Tus próximos pasos');if(currentSteps.length)currentSteps.forEach((text:string,index:number)=>write((index+1)+'. '+completeText(text),10));else write('Compara las opciones relacionadas, prueba una actividad y conversa con tu orientador.');
- if(ready&&!r.historical)write('Los enlaces de autopreparación abren las opciones de esta ruta. Los cursos y simuladores aparecen cuando tu institución ha publicado contenido relacionado.',9,false,muted);
+ if(ready&&!r.historical&&(!school||selection.options.length))write('Los enlaces de autopreparación abren las opciones de esta ruta. Los cursos y simuladores aparecen cuando tu institución ha publicado contenido relacionado.',9,false,muted);
 
  page();section('Resultados por test y respuestas guardadas');write('Cada test conserva su versión y sus reglas. Las respuestas se muestran una sola vez, con sus puntuaciones cuando corresponde.',9,false,muted,4);
  for(const item of items){

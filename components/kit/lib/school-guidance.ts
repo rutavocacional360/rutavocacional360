@@ -1,4 +1,5 @@
 import { baccalaureateTypes, learningPreferences, scienceOptions, technicalOptions, schoolSources, pathwayVersion, type SchoolProfile, type SchoolOption } from '../data/baccalaureate';
+import {schoolSelection} from './school-selection';
 
 export type SchoolRelation = {optionId:string;reason:string;evidence:string[];dimensionId:string;value:number;min:number;max:number};
 export function schoolGuidance(scores: {dimension:string;raw:number}[], evidence: string[], profile: SchoolProfile = {}, careers: {id:string;name:string;areaId?:string}[] = [], relations: SchoolRelation[] = []) {
@@ -96,9 +97,10 @@ export function schoolGuidance(scores: {dimension:string;raw:number}[], evidence
 }
 export type SchoolGuidance = ReturnType<typeof schoolGuidance>;
 export function schoolReportSections(p: SchoolGuidance) {
+  const selection=schoolSelection(p);
   return [
-    {title:'1. Tu perfil de bachillerato',lines:[p.profile.stage,p.profile.baccalaureate,...(p.profile.specialty?[p.profile.specialty]:[]),p.profile.learningPreference,p.context,p.title,p.reason]},
-    ...([{title:'2. Ciencias: áreas para explorar',options:p.science},{title:'2. Técnico: figuras profesionales para explorar',options:p.technical}]).map(({title,options})=>({title,lines:options.length?options.flatMap(o=>[o.name,o.reason,'Asignaturas y contenidos: '+o.subjects,'Actividad: '+o.activity,'Conexión universitaria: '+(o.careers.map(c=>c.name).join(', ')||'Consulta el catálogo y compara programas de esta área.')]):[p.suggested==='pendiente'?'Sin áreas priorizadas. Completa los tests o espera los resultados evaluados para recibir orientación.':'No se priorizan opciones de esta modalidad con los resultados actuales. Compara sus asignaturas y explora el catálogo completo.']})),
+    {title:'1. Tu perfil de bachillerato',lines:[p.profile.stage,p.profile.baccalaureate,...(p.profile.specialty?[p.profile.specialty]:[]),p.profile.learningPreference,p.context,selection.title,p.reason]},
+    ...(selection.modality?[{title:'2. '+selection.optionsTitle,lines:selection.options.length?selection.options.flatMap((o,index)=>[(index+1)+'. '+o.name,o.reason,'Asignaturas y contenidos: '+o.subjects,'Actividad: '+o.activity,'Conexión universitaria: '+(o.careers.map(c=>c.name).join(', ')||'Consulta el catálogo y compara programas de esta área.')]):['No se prioriza una opción concreta dentro de esta modalidad. Revisa las asignaturas y actividades con tu orientador.']}]:[]),
     {title:'3. Del bachillerato a la universidad',lines:[p.bridge,...p.nextSteps,...p.notes,...p.sources.map(s=>s.title+': '+s.url)]},
   ];
 }

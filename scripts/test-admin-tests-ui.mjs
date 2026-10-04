@@ -31,7 +31,7 @@ await build({stdin:{contents:`export {IntegralReports} from './components/kit/fe
 }}]});
 const {IntegralReports,TestManager,AudienceSettings,adminTestLevel,exactTestLevel,testManagerHref,nextTestVersion,testsImportedForLevel,testImportForm}=createRequire(import.meta.url)(resolve(folder,'ui.cjs'));
 const text=value=>typeof value==='string'||typeof value==='number'?String(value):Array.isArray(value)?value.map(text).join(''):React.isValidElement(value)?text(value.props.children):'';
-const instrument=(id,educationLevel,status='Borrador',patch={})=>({id,educationLevel,status,schemaVersion:2,aggregation:'sum',version:'1',stableId:'shared-family',title:id,description:'Instrumento QA',questions:[],options:[],scoring:'manual',group:'Todos los estudiantes',due:'',...patch});
+const instrument=(id,educationLevel,status='Borrador',patch={})=>({id,educationLevel,status,schemaVersion:2,aggregation:'sum',version:'1',stableId:'shared-family',title:id,description:'Instrumento QA',questions:[{id:'question-qa',type:'open',text:'Describe una actividad que te interesa.'}],options:[],scoring:'manual',group:'Todos los estudiantes',due:'',...patch});
 const originalFetch=globalThis.fetch,originalWindow=globalThis.window;
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 async function waitFor(predicate){for(let i=0;i<15&&!predicate();i++)await tick();assert(predicate(),'Async UI action did not finish');}
@@ -85,6 +85,11 @@ try{
   const audience=renderToStaticMarkup(React.createElement(AudienceSettings,{test:instrument('audience',level,'Borrador',{audience:'selected',studentIds:[]}),users:globalThis.__adminUsers,onChange(){}}));assert(audience.includes('Categoría: '+(level==='bachillerato'?'Bachillerato':'Universidad')));assert(!audience.includes('Bachillerato y Universidad')&&!audience.includes('value="ambos"'));assert(audience.includes(level==='bachillerato'?'Estudiante EGB QA':'Estudiante graduado QA'));assert(!audience.includes(level==='bachillerato'?'Estudiante graduado QA':'Estudiante EGB QA'));
   const payload=testImportForm(new File(['contenido'],'fixture.html'),level);assert.equal(payload.get('educationLevel'),level);assert.equal(testsImportedForLevel([instrument('metadata','ambos')],level)[0].educationLevel,level);
  }
+ initialize('bachillerato');globalThis.__adminCustom=[instrument('Borrador incompleto QA','bachillerato','Borrador',{questions:[]})];
+ renderToStaticMarkup(React.createElement(TestManager));click('Publicar y asignar');await tick();
+ assert.equal(globalThis.__adminCustomSnapshots.length,0,'An empty test cannot bypass publication validation from its listing card');
+ assert.equal(globalThis.__adminEdited.at(-1)?.id,'Borrador incompleto QA','Publication opens the incomplete draft for review instead of returning repeated API errors');
+ assert.equal(globalThis.__adminEdited.at(-1)?.status,'Borrador');
  globalThis.__adminRole='student';const historical=renderToStaticMarkup(React.createElement(IntegralReports));assert(historical.includes('/mi-ruta/resultados'));assert(historical.includes('Copias históricas'));assert(!historical.includes('Generar informe integral')&&!historical.includes('al menos una evaluación'));
  const css=readFileSync('components/kit/features/admin/test-manager.css','utf8');assert(css.includes('min-height: 44px'));assert(css.includes('@media (max-width: 640px)'));assert(css.includes('flex-wrap: wrap'));
  console.log('PASS admin evaluations UI: independent tabs, scoped create/copy/publish/archive, preserved upload/retry categories, fixed editor category, and responsive controls.');

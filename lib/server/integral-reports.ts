@@ -1,4 +1,5 @@
 import {reportLimitations} from '@/components/kit/lib/report-limitations';
+import {schoolSelection} from '@/components/kit/lib/school-selection';
 import { ensureGuidance } from './guidance';
 import { studentEducationLevel,submissionRoutes } from './assessment-route';
 import { requireCompletedAssessments } from './assessment-readiness';
@@ -16,7 +17,7 @@ import type {
 } from "@/components/kit/lib/integral-report";
 import { asyncSome } from "@/lib/server/async-collections";
 
-const ENGINE = 'route-integral-'+GUIDANCE_RULES_VERSION;
+const ENGINE = 'route-integral-single-modality-'+GUIDANCE_RULES_VERSION;
 const areaName = (code: string) =>
   dimensions.find((d) => d.code === code)?.name || code;
 function ensureTables() {}
@@ -203,8 +204,9 @@ export async function createIntegralReport(
   ]});
   if(school){
     const pathway=guidance.analysis.pathway;
-    sections.push({title:'Modalidad de Bachillerato recomendada',lines:[pathway.title,pathway.reason]});
-    for(const group of [{title:'Ciencias: áreas para explorar',options:pathway.science},{title:'Técnico: figuras profesionales para explorar',options:pathway.technical}])sections.push({title:group.title,lines:group.options.length?group.options.flatMap((option:any)=>[option.name,option.reason,'Asignaturas: '+option.subjects,'Actividad: '+option.activity,'Evidencia: '+option.evidence.join(', ')]):['Sin opciones priorizadas; compara las modalidades con tu orientador.']});
+    const selection=schoolSelection(pathway);
+    sections.push({title:selection.modality?'Modalidad de Bachillerato recomendada':'Modalidad por definir',lines:[...(selection.modality?[selection.title]:[]),pathway.reason]});
+    if(selection.modality)sections.push({title:selection.optionsTitle,lines:selection.options.length?selection.options.flatMap((option,index)=>[(index+1)+'. '+option.name,option.reason,'Asignaturas: '+option.subjects,'Actividad: '+option.activity,'Evidencia: '+option.evidence.join(', ')]):['Sin opciones priorizadas dentro de esta modalidad. Revisa las asignaturas y actividades con tu orientador.']});
   }else sections.push({title:'Carreras universitarias relacionadas con tus resultados',lines:guidance.analysis.recommendations.length?guidance.analysis.recommendations.flatMap((option:any)=>[guidance.catalog.find((c:any)=>c.id===option.careerId)?.name||option.careerId,option.reason,'Qué explorar: '+option.explore,'Evidencia: '+option.evidence.join(', ')]):['Los resultados todavía no permiten priorizar una carrera. Contrasta tus intereses con experiencias y orientación docente.']});
   sections.push({title:'Recomendaciones para avanzar',lines:guidance.analysis.nextSteps});
   sections.push({title:'Fuentes de esta ruta',lines:[guidance.catalogSource.source,guidance.catalogSource.sourceUrl,'Consulta: '+guidance.catalogSource.date,'Reglas: '+guidance.rulesVersion]});

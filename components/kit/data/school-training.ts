@@ -1,4 +1,5 @@
 import {scienceOptions,technicalOptions,isChoosingBaccalaureate} from './baccalaureate';
+import {schoolSelection} from '../lib/school-selection';
 export type EducationLevel='bachillerato'|'universidad';
 export const schoolTarget=(id:unknown):id is string=>typeof id==='string'&&id.startsWith('bachillerato:');
 /** Modalities are publishing scopes, never individual study options for students. */
@@ -23,7 +24,7 @@ export const schoolTrainingTargets=[
 export function schoolPreparationRecommendations(report:any){
  const p=report?.analysis?.pathway;
  if(!p||p.suggested==='pendiente'||report.readiness?.bachillerato?.ready!==true||report.educationLevel&&report.educationLevel!=='bachillerato')return [];
- const options=p.suggested==='tecnico'?[...(p.technical||[]),...(p.science||[])]:[...(p.science||[]),...(p.technical||[])];
+ const {options}=schoolSelection(p);
  const ids=options.map(o=>'bachillerato:'+o.id);
  return [...new Set<string>(ids)].flatMap(id=>{
   const target=schoolTrainingTargets.find(t=>t.id===id&&!schoolModalityTarget(t.id));

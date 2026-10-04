@@ -26,11 +26,36 @@ export async function runSchoolTrainingHttp({base,password,adminCookie,schoolOri
   await student('assessments/submit',{instrumentId:test.id});
  }
  assert((await student('training')).readiness.bachillerato.ready);
+ const tiedReport=(await student('reports/guidance')).items.find(report=>!report.historical);
+ assert.equal(tiedReport.analysis.pathway.suggested,'ambas','Equal R/I answers leave the modality unresolved');
+ const tiedTraining=await student('training');
+ assert.deepEqual(tiedTraining.recommendations,[],'A complete tied profile cannot unlock both school modalities');
+ assert.equal(tiedTraining.simulators.length,0);
+ await student('training/simulator/start',{simulatorId:lockedSimulator.id,mode:'practice'},'POST',403);
  const universityRecommendations=(await student('training')).recommendations.filter(r=>!r.careerId.startsWith('bachillerato:')).map(r=>r.careerId);assert.deepEqual(universityRecommendations,[]);
 
  await admin('training/delete-simulator',{kind:'simulator',id:lockedSimulator.id,version:lockedSimulator.version,revision:lockedSimulator.revision});
  const created=[];
  for(const kind of ['ciencias','tecnico']){
+  // Retake the real interest test through HTTP so each modality is independently
+  // supported by saved answers; no report or recommendation is fabricated.
+  const interest=registration.value.values['rv360:battery'].instruments.find(test=>test.id==='intereses');
+  assert(interest);
+  await student('assessments/start',{instrumentId:interest.id});
+  const active=await student('session'),key='rv360:answers:'+interest.id+':'+interest.version;
+  const preferred=kind==='ciencias'?'I':'R';
+  const answers=Object.fromEntries(interest.questions.map(q=>[q.id,q.dimension===preferred?5:2]));
+  await student('state',{key,value:answers,revision:active.revisions[key]||0},'PUT');
+  await student('assessments/submit',{instrumentId:interest.id});
+  const currentReport=(await student('reports/guidance')).items.find(report=>!report.historical);
+  assert.equal(currentReport.analysis.pathway.suggested,kind,'Saved interest answers select the modality under test');
+  const selectedOptions=currentReport.analysis.pathway[kind==='ciencias'?'science':'technical'];
+  const currentTraining=await student('training');
+  assert.deepEqual(currentTraining.recommendations.map(item=>item.careerId),selectedOptions.map(option=>'bachillerato:'+option.id),'Preparation contains exactly the options of the selected modality');
+  for(const previous of created){
+   assert(!currentTraining.simulators.some(simulator=>simulator.id===previous.id),'Changing recommendation hides simulators of the previous modality');
+   await student('training/simulator/start',{simulatorId:previous.id,mode:'practice'},'POST',403);
+  }
   const template=schoolPracticeTemplate(blank,kind);
   await admin('training/entity',{kind:'simulator',entity:{...template,careerIds:['bachillerato:inexistente']}},400);
   const university=(await admin('training')).careers.find(c=>!c.id.startsWith('bachillerato:')).id;

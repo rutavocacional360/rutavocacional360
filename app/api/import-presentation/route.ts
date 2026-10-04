@@ -7,6 +7,7 @@ import { suggestSimulatorFields, suggestStudyOptions } from "@/lib/server/simula
 import { assessmentImportLevel } from '@/lib/server/assessment-import';
 import { schoolTrainingTargets, schoolTarget } from '@/components/kit/data/school-training';
 import { ecuadorCareers } from '@/lib/server/ecuador-catalog';
+import { completeAssessmentDraft } from '@/lib/server/test-autofill';
 export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   try {
@@ -14,8 +15,9 @@ export async function POST(req: NextRequest) {
     if (!trustedMutationOrigin(req)) fail("Origen no permitido.", 403);
     await rateLimit("ai-editor:" + user.id);
     const body = await readJsonObject(req, 300000);
-    if (body.operation !== undefined && !['study-options', 'simulator'].includes(body.operation))
+    if (body.operation !== undefined && !['study-options', 'simulator', 'test-draft'].includes(body.operation))
       fail('Operación de IA no válida. Actualiza la aplicación y vuelve a intentar.');
+    if(body.operation==='test-draft')return NextResponse.json(await completeAssessmentDraft(user,body),{headers:{'Cache-Control':'no-store'}});
     if(body.operation === 'study-options') {
       const educationLevel = assessmentImportLevel(body.educationLevel);
       if(typeof body.title !== 'string' || body.title.length > 500 || typeof body.description !== 'string' || body.description.length > 40000)
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
         error: e.status
           ? e.message
           : "No se pudo generar la sugerencia. Vuelve a intentar.",
-        ...(e.code === 'AI_CONFIG' ? {code: e.code} : {}),
+        ...(typeof e.code==='string'&&/^AI_/.test(e.code) ? {code: e.code} : {}),
       },
       { status: e.status || 503, headers: { "Cache-Control": "no-store" } },
     );

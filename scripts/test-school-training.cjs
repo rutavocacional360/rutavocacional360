@@ -44,10 +44,11 @@ assert(!trainingTargetMatches(['bachillerato:tecnico'],'bachillerato:inexistente
 assert(trainingTargetMatches(['university-career'],'university-career'));
 // Keep broad publishing scopes, but never offer a modality as a student's career.
 const schoolReport={educationLevel:'bachillerato',readiness:{bachillerato:{ready:true}},analysis:{pathway:{suggested:'ambas',science:[{id:'ciencias-exactas',reason:'Ciencias QA'}],technical:[{id:'contabilidad',reason:'Técnica QA'}]}}};
-assert.deepEqual(schoolPreparationRecommendations(schoolReport).map(r=>r.careerId),['bachillerato:ciencias-exactas','bachillerato:contabilidad']);
+assert.deepEqual(schoolPreparationRecommendations(schoolReport),[],'Ties do not unlock either modality');
+for(const [suggested,ids] of [['ciencias',['bachillerato:ciencias-exactas']],['tecnico',['bachillerato:contabilidad']],['pendiente',[]]])assert.deepEqual(schoolPreparationRecommendations({...schoolReport,analysis:{pathway:{...schoolReport.analysis.pathway,suggested}}}).map(r=>r.careerId),ids,'Only the recorded modality unlocks matching preparation');
 assert.equal(schoolTrainingTargets.filter(t=>!schoolModalityTarget(t.id)).length,38,'All 34 technical figures and four science areas stay available');
-const legacyReport={...schoolReport,analysis:{pathway:{...schoolReport.analysis.pathway,science:[{id:'ciencias'},{id:'ciencias-exactas'}],technical:[{id:'tecnico'},{id:'contabilidad'}]}}};
-assert.deepEqual(schoolPreparationRecommendations(legacyReport).map(r=>r.careerId),['bachillerato:ciencias-exactas','bachillerato:contabilidad'],'Legacy pathway data cannot revive modality cards');
+const legacyReport={...schoolReport,analysis:{pathway:{...schoolReport.analysis.pathway,suggested:'ciencias',science:[{id:'ciencias'},{id:'ciencias-exactas'}],technical:[{id:'tecnico'},{id:'contabilidad'}]}}};
+assert.deepEqual(schoolPreparationRecommendations(legacyReport).map(r=>r.careerId),['bachillerato:ciencias-exactas'],'Legacy pathway data cannot revive modality cards or options of the other modality');
 
 const t={...schoolOrientationTemplate(),id:'school',version:'1'};
 assert.deepEqual(instrumentProblems(t),[]);

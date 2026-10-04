@@ -6,6 +6,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:ai:live": "node scripts/test-ai-live.mjs",
     "test:admin:visual": "node scripts/test-guidance-server.mjs --admin-visual",
+    "test:admin:completion:visual": "node scripts/test-guidance-server.mjs --completion-visual",
     "test:users:visual": "node scripts/test-guidance-server.mjs --users-visual",
     "test:pdf": "node scripts/test-pdf-viewer.cjs && node scripts/test-results-pdf.cjs",
     "test:pdf:runtime": "node scripts/test-pdf-runtime.mjs",

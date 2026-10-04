@@ -19,7 +19,24 @@
 .assessment-manager .test-builder-header { flex-wrap: wrap; }
 .assessment-manager .import-drop strong { max-width: 100%; overflow-wrap: anywhere; }
 .assessment-manager .import-drop:focus-within { outline: 3px solid var(--primary); outline-offset: 3px; }
+.assessment-manager .te-ai-complete { display:grid; gap:14px; padding:20px; border:1px solid var(--border,#dce3f1); border-radius:14px; background:var(--surface,#fff); }
+.assessment-manager .te-ai-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+.assessment-manager .te-ai-heading h2 { margin:0 0 6px; font-size:18px; }
+.assessment-manager .te-ai-heading p { margin:0; color:var(--muted,#5d6b80); line-height:1.6; max-width:70ch; }
+.assessment-manager .te-ai-heading>.button { flex-shrink:0; min-height:44px; }
+.assessment-manager .te-ai-complete summary { min-height:44px; padding:10px 0; cursor:pointer; font-weight:600; }
+.assessment-manager .te-ai-complete p,.assessment-manager .te-ai-complete li { overflow-wrap:anywhere; line-height:1.6; }
+.assessment-manager .te-ai-result { display:grid; gap:12px; }
+.assessment-manager .te-ai-result .row { flex-wrap:wrap; }
+.assessment-manager .te-ai-result .button { min-height:44px; white-space:normal; text-align:left; }
+.assessment-manager .te-ai-issues { padding:0; margin:0; list-style:none; }
+.assessment-manager .te-ai-issues .button { justify-content:flex-start; width:100%; }
+.assessment-manager .te-editor .notice .text-link { min-height:44px; white-space:normal; text-align:left; }
+.assessment-manager .te-ai-progress { margin:0; color:var(--primary); }
+.assessment-manager .te-ai-complete :is(button,summary):focus-visible { outline:3px solid var(--primary); outline-offset:3px; }
 @media (max-width: 640px) {
+  .assessment-manager .te-ai-complete { padding:16px; }
+  .assessment-manager .te-ai-heading { align-items:stretch; flex-direction:column; gap:14px; }
   .assessment-manager > .ar-tabs > button { flex: 1; }
   .assessment-manager .test-manager-header-actions { width: 100%; }
   .assessment-manager .test-manager-header-actions > button { flex: 1 1 160px; }
