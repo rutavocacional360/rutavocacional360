@@ -63,6 +63,29 @@ try{
  assert(specialty.includes('<strong>2</strong><p>Simuladores disponibles'),'Adding reading programs does not change simulator filtering/counts');
  assert(specialty.includes('Investigación y aplicación de tus resultados'));
  assert(specialty.includes('href="/mi-ruta/resultados"'));
+ // A simulator used inside a course has an independent direct-practice quota.
+ const attemptFixture={id:'course-attempt',enrollment_id:'course-enrollment',simulator:{id:'general',educationLevel:'bachillerato'},instrument:{title:'Resultado curso QA'},mode:'practice',state:'graded',finished_at:'2026-10-01T00:00:00Z',result:{percent:80}};
+ globalThis.__trainingFixture.simulators[0].maxAttempts=1;
+ globalThis.__trainingFixture.enrollments=[{id:'course-enrollment',course_id:'general-reading',snapshot:globalThis.__trainingFixture.courses[0],completed:[]}];
+ globalThis.__trainingFixture.attempts=[attemptFixture];
+ globalThis.__trainingButtons=[];
+ const separateQuota=renderToStaticMarkup(React.createElement(StudentCourses));
+ assert(!separateQuota.includes('1 / 1 intentos'),'A course attempt must not consume direct practice attempts');
+ assert(globalThis.__trainingButtons.filter(button=>button.children==='Practicar').every(button=>!button.disabled),'Course activity history must not block independent practice');
+ assert(separateQuota.includes('Resultado curso QA'),'Course results remain available in the overall history');
+ globalThis.__trainingFixture.enrollments.push({id:'direct-enrollment',course_id:'direct:general',snapshot:{id:'direct:general',careerIds:['bachillerato:ciencias'],activities:[]},completed:[]});
+ globalThis.__trainingFixture.attempts.push({...attemptFixture,id:'direct-attempt',enrollment_id:'direct-enrollment',state:'recoverable',result:null});
+ globalThis.__trainingButtons=[];
+ const recoverable=renderToStaticMarkup(React.createElement(StudentCourses));
+ assert(recoverable.includes('1 / 1 intentos'),'Only direct attempts count toward the direct quota');
+ assert.equal(globalThis.__trainingButtons.find(button=>button.children==='Continuar')?.disabled,false,'A recoverable submission remains available even when its quota is exhausted');
+ globalThis.__trainingFixture.attempts=[{...attemptFixture,id:'recent',enrollment_id:'direct-enrollment',started_at:'2026-10-03T00:00:00Z',result:{percent:90}},{...attemptFixture,id:'earlier',enrollment_id:'direct-enrollment',started_at:'2026-10-01T00:00:00Z',result:{percent:30}}];
+ globalThis.__trainingFixture.simulators[0].gradePolicy='last';
+ assert(renderToStaticMarkup(React.createElement(StudentCourses)).includes('Nota: 90 / 100'),'Last-attempt grading uses chronological order even when the API returns newest first');
+ globalThis.__trainingFixture.simulators[0].gradePolicy='first';
+ assert(renderToStaticMarkup(React.createElement(StudentCourses)).includes('Nota: 30 / 100'),'First-attempt grading uses the earliest actual attempt');
+ globalThis.__trainingFixture.enrollments=[];globalThis.__trainingFixture.attempts=[];
+
  globalThis.__trainingQuery='carrera=bachillerato%3Aciencias';
  const legacyModality=renderToStaticMarkup(React.createElement(StudentCourses));
  assert(legacyModality.includes('Elige un área o figura profesional para ver sus simuladores.'));
@@ -91,6 +114,16 @@ for(const level of ['bachillerato','universidad']){
  assert(markup.includes('Simulador '+level));assert(!markup.includes('Simulador '+(level==='bachillerato'?'universidad':'bachillerato')));
  const other=level==='bachillerato'?'Universidad':'Bachillerato';globalThis.__trainingButtons.find(b=>b.children===other).onClick();assert.equal(globalThis.__trainingNavigations.at(-1),'/admin/cursos?nivel='+other.toLowerCase());
 }
+// Published simulators and their draft versions share one card and editing resumes the saved draft.
+globalThis.__trainingQuery='nivel=universidad';globalThis.__trainingNavigations=[];globalThis.__trainingButtons=[];
+const familySimulator={id:'sim-family',title:'Familia simulador QA',educationLevel:'universidad',instrument:{description:'Familia QA'},durationMinutes:30,careerIds:[],questions:[]};
+globalThis.__trainingFixture={careers:[],attempts:[],simulators:[{...familySimulator,version:1,status:'archived'},{...familySimulator,version:2,status:'published'},{...familySimulator,version:3,status:'draft'}]};
+const familyMarkup=renderToStaticMarkup(React.createElement(AdminCourses));
+assert.equal((familyMarkup.match(/<h2>Familia simulador QA<\/h2>/g)||[]).length,1,'Versions are grouped into one simulator card');
+assert(familyMarkup.includes('pendiente de publicar')&&familyMarkup.includes('Eliminar borrador v'),'The existing draft is explained and can be deleted independently');
+assert(familyMarkup.includes('La versión 2 está publicada.')&&familyMarkup.includes('borrador de la versión 3'),'Version labels retain readable Spanish accents');
+globalThis.__trainingButtons.find(button=>button.children==='Editar con IA').onClick();
+assert.equal(globalThis.__trainingNavigations.at(-1),'/admin/cursos?nivel=universidad&editar=sim-family&version=3','Editing an existing publication resumes its draft instead of creating duplicates');
 const optionMarkup=renderToStaticMarkup(React.createElement(StudyOptionSuggestions,{test:{id:'qa',educationLevel:'bachillerato',title:'Bachillerato en Ciencias',description:'Documento de ciencias',options:[],questions:[]},careers:[{id:'bachillerato:ciencias',name:'Bachillerato en Ciencias'}],onSelect(){}}));
 assert(optionMarkup.includes('Opciones detectadas en el contenido'));assert(optionMarkup.includes('Detectar opciones con IA'));
 console.log('PASS admin category routes, scoped simulator lists and automatic document option suggestions.');

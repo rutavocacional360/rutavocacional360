@@ -14,5 +14,20 @@ export async function testSchoolsHttp({request,adminCookie,cookie,userId,base}){
  assert.equal((await request('admin/schools/members?schoolId='+school.id,null,adminCookie)).status,200);
  assert.equal((await fetch(base+'/admin/escuelas',{headers:{Cookie:adminCookie}})).status,200);
  const blocked=await fetch(base+'/admin/escuelas',{headers:{Cookie:cookie},redirect:'manual'});assert.equal(blocked.status,307);
- console.log('PASS HTTP schools: authorization, create/list, assignment, archive, retained members and protected page.');
+ const remove={action:'delete',id:school.id,revision:school.revision};
+ assert.equal((await request('admin/schools',remove,cookie)).status,403);
+ assert.equal((await request('admin/schools',{...remove,revision:0},adminCookie)).status,409);
+ const profileBefore=(await (await request('session',null,cookie)).json()).values['rv360:profile'];
+ assert.equal((await request('admin/schools',remove,adminCookie)).status,200);
+ assert.equal((await request('admin/schools/members?schoolId='+school.id,null,adminCookie)).status,404);
+ const after=(await (await request('session',null,cookie)).json());
+ assert.equal(after.user.id,userId,'School deletion preserves the account and session');
+ assert.deepEqual(after.values['rv360:profile'],profileBefore,'School deletion preserves the declared profile');
+ assert.equal((await request('admin/schools',school,adminCookie)).status,404,'Stale save cannot recreate a deleted school');
+ const recreated=await request('admin/schools',{name:'Escuela recreada',code:school.code,city:'',contact:'',email:'',status:'Activa'},adminCookie);
+ assert.equal(recreated.status,200,'Deletion frees the school code');
+ const replacement=(await recreated.json()).school;
+ const unassigned=await request('admin/schools/members?schoolId='+replacement.id+'&scope=unassigned',null,adminCookie);
+ assert((await unassigned.json()).items.some(member=>member.id===userId),'School deletion removes directory assignments');
+ console.log('PASS HTTP schools: authorization, create/list, assignment, archive, confirmed deletion, unchanged account/profile, freed code, stale-save protection and protected page.');
 }

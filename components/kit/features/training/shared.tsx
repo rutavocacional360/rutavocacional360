@@ -1,11 +1,13 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readApiResponse } from "../../lib/api-response";
+import { adminFetch } from "../../lib/admin-session";
+import { getSession } from "../../lib/session";
 import { Button, Notice } from "../../components/ui/primitives";
 export async function trainingApi(path = "", body?: any, method = "POST") {
-
+  const send = getSession().user?.role === "admin" ? adminFetch : fetch;
   try { return await readApiResponse(
-    await fetch("/api/training" + path, {
+    await send("/api/training" + path, {
       method: body === undefined ? "GET" : method,
       headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),

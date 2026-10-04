@@ -83,7 +83,7 @@ export async function runAdminUsersVisual({base,password,folder}) {
     await page.getByLabel('Nombre y apellido',{exact:true}).fill(initialName);
     await page.getByLabel('Correo electrónico',{exact:true}).fill(email);
     await page.getByLabel('Contraseña inicial',{exact:true}).fill(password);
-    await page.getByLabel('Etapa educativa',{exact:true}).fill('Estoy eligiendo mi bachillerato');
+    await choose(page,'Etapa educativa','Estoy eligiendo mi bachillerato');
     await saveUser();
     await page.getByLabel('Buscar usuario',{exact:true}).fill(email);
     await page.getByRole('button',{name:'Editar '+initialName,exact:true}).waitFor();

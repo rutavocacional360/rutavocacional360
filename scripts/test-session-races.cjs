@@ -3,6 +3,7 @@ const source=ts.transpileModule(fs.readFileSync('components/kit/lib/session.ts',
 const requests=[],catalogs=[];
 const context={exports:{},sessionStorage:{},localStorage:{},fetch:(url)=>new Promise((resolve,reject)=>requests.push({url,resolve,reject})),require:(name)=>{
  if(name==='react')return {};
+ if(name==='./admin-session')return {adminFetch:(...args)=>context.fetch(...args)};
  if(name==='./api-response')return {readApiResponse:response=>response.json()};
  if(name==='../data/instruments')return {configureInstruments:()=>{}};
  if(name==='./catalog')return {configureCatalog:value=>catalogs.push(value)};
@@ -43,6 +44,7 @@ const finish=(index,data)=>requests[index].resolve(Response.json(data));
  const failedSave=session.saveValue('draft','unsaved');await Promise.resolve();
  requests[11].reject(Error('Save failed'));await assert.rejects(failedSave,/Save failed/);
  first=session.refreshSession();finish(12,payload('recovered'));await first;
+ assert.equal(session.getSession().values.draft,'unsaved','Refreshing must retain a failed draft so it can still be corrected or retried');
  await assert.rejects(session.flush(),/Save failed/,'Refreshing cannot hide an unsaved edit');
  console.log('PASS session races: response ordering, obsolete errors, edits, logout and current failures.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -41,6 +41,7 @@ try {
  const legacyGeneralCourse=await saveTraining(admin,'course',{...programmeInput,title:'Programa histórico sin clasificación',educationLevel:undefined});
  const fieldCourse=await saveTraining(admin,'course',{...programmeInput,title:'Curso especializado sin destinatarios',type:'field'});
  await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run('other-student','Otra cuenta','other@example.test','unused','student','org','','Activo');
+ await put('other-student','rv360:profile',{stage:'Estoy eligiendo mi bachillerato',baccalaureate:'por-definir'});
  const restrictedCourses=[];
  for(const patch of [{title:'Programa solo para otra cuenta',access:'selected',studentIds:['other-student']},{title:'Programa futuro',availableFrom:'2099-01-01'},{title:'Programa vencido',availableUntil:'2000-01-01'},{title:'Programa borrador',status:'draft'}])restrictedCourses.push(await saveTraining(admin,'course',{...programmeInput,...patch}));
  const read=(enrollmentId,activityId)=>api.trainingAction(user,'training/read','POST',{enrollmentId,activityId},new URLSearchParams());

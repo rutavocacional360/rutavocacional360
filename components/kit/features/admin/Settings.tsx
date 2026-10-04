@@ -33,6 +33,7 @@ export function Settings() {
   );
   const [form, setForm] = useState(stored);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   return (
     <>
@@ -46,9 +47,11 @@ export function Settings() {
         noValidate
         onSubmit={async (e) => {
           e.preventDefault();
+          if (busy) return;
           const problem = settingsProblem(form);
           if (problem) { setError(problem); return; }
-          try {await setStored(form);await flush();setError("");toast("Configuración guardada");} catch(e){setError((e as Error).message);}
+          setBusy(true);
+          try {await setStored(form);await flush();setError("");toast("Configuración guardada");} catch(e){setError((e as Error).message);} finally {setBusy(false);}
         }}
       >
         <div className="grid grid-2 align-start">
@@ -138,7 +141,7 @@ export function Settings() {
         </div>
         {error && <Notice tone="danger">{error}</Notice>}
         <div className="row">
-          <Button type="submit" icon={<Save size={17} />}>
+          <Button type="submit" loading={busy} icon={<Save size={17} />}>
             Guardar configuración
           </Button>
           <small className="muted">Los cambios se aplican al guardar.</small>

@@ -83,6 +83,7 @@ try {
   await action('delete-simulator',ref(second));
   assert(!(await trainingState(admin)).simulators.some(s=>s.id===created.id));
   await conflict(()=>saveTraining(admin,'simulator',{...secondDraft,title:'No resucitar'}));
+  await conflict(()=>saveTraining(admin,'simulator',{...second,version:0,revision:0,status:'draft'}));
   if(attempt)assert.equal((await api.attemptView(student,await api.attempt(student,attempt.id))).result.percent,100,'Deleted simulator retains attempt and grade');
   const disposable=await saveTraining(admin,'simulator',{...template,title:'Descartable '+level});
   await conflict(()=>action('delete-draft',{...ref(disposable),revision:0}));

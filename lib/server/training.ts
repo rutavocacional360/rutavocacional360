@@ -111,6 +111,19 @@ function knownTrainingLevel(value: any) {
     return preparationLevel(value.careerIds);
   return undefined;
 }
+function courseContentKey(value: Course) {
+  return JSON.stringify({
+    level: preparationLevel(value.careerIds, value.educationLevel),
+    title: value.title.trim(), description: value.description, objectives: value.objectives,
+    type: value.type, difficulty: value.level, careerIds: value.careerIds, fields: value.fields,
+    institutions: value.institutions || [], access: value.access, studentIds: value.studentIds,
+    availableFrom: value.availableFrom || '', availableUntil: value.availableUntil || '',
+    profileId: value.profileId || '', profileVersion: value.profileVersion || 0,
+    activities: value.activities?.map(activity => [activity.module, activity.title,
+      activity.kind, activity.content, activity.required, activity.completion,
+      activity.simulatorId || '', activity.simulatorVersion || 0, activity.target ?? null]),
+  });
+}
 export function trainingCatalog() {
   const offers = careerOffers(ecuadorCareers.map((c) => c.id));
   const careers = ecuadorCareers
@@ -294,6 +307,9 @@ async function validate(u: User, kind: string, e: any) {
     )
   )
     fail("Un destinatario no pertenece a esta plataforma.");
+  if (c.access === 'selected' && await asyncSome(c.studentIds, async id =>
+    await studentEducationLevel({id}) !== preparationLevel(c.careerIds, c.educationLevel)))
+    fail("Selecciona destinatarios de la misma ruta educativa que el curso.");
   if (
     [c.availableFrom, c.availableUntil].some(
       (d) => d && !Number.isFinite(Date.parse(d)),
@@ -330,6 +346,7 @@ async function validate(u: User, kind: string, e: any) {
     if (
       !a.id ||
       !a.title?.trim() ||
+      !a.module?.trim() ||
       !["text", "link", "simulator"].includes(a.kind)
     )
       fail("Revisa las actividades.");
@@ -367,8 +384,16 @@ export async function saveTraining(u: User, kind: string, input: any) {
   admin(u);
   return await tx(async () => {
     if (!input || typeof input !== "object") fail("Contenido inválido.");
+    const family = input.id ? (await rows(u, kind)).filter(x => x.id === input.id) : [];
+    if (input.id && !family.length)
+      fail('Este contenido ya no está disponible. Recarga el catálogo antes de guardar.', 409);
+    // A fresh draft can match the content of a previously published draft. Tie
+    // its retry key to the source publication while keeping repeated saves safe.
+    const sourceVersion = input.id && !input.version
+      ? family.filter(x => x.status !== 'draft').map(x => [x.version, x.revision])
+      : null;
     const mutationId = createHash("sha256")
-      .update(JSON.stringify([u.id, kind, input]))
+      .update(JSON.stringify(sourceVersion ? [u.id, kind, input, sourceVersion] : [u.id, kind, input]))
       .digest("hex");
     const replay = (await db
       .prepare("SELECT result FROM training_mutations WHERE id=?")
@@ -379,7 +404,8 @@ export async function saveTraining(u: User, kind: string, input: any) {
       if (current && current.revision === saved.revision && current.status === saved.status) return current;
       fail("Este contenido cambió después del guardado. Recarga antes de continuar.", 409);
     }
-    const family = input.id ? (await rows(u, kind)).filter(x => x.id === input.id) : [];
+    if (input.id && !input.version && family.some(x => x.status === 'draft'))
+      fail('Ya existe un borrador de este contenido. Ábrelo para continuar editando sin crear otra versión.', 409);
     const old = input.id
       ? family.find(
           (x) => x.id === input.id && x.version === input.version,
@@ -411,15 +437,18 @@ export async function saveTraining(u: User, kind: string, input: any) {
       !(await rows(u, kind)).some((x) => x.id === input.id)
     )
       fail("Contenido no disponible.", 403);
-    if (kind === 'simulator') {
+    if (kind === 'simulator' || kind === 'course') {
       const familyLevel = family.map(knownTrainingLevel).find(Boolean);
       const requestedLevel = knownTrainingLevel(e);
       if (familyLevel && requestedLevel && familyLevel !== requestedLevel)
-        fail('La categoría del simulador es inmutable. Crea una copia independiente para la otra ruta educativa.', 409);
+        fail('La categoría del contenido es inmutable. Crea una copia independiente para la otra ruta educativa.', 409);
       if (e.educationLevel === undefined && (familyLevel || requestedLevel))
         e.educationLevel = familyLevel || requestedLevel;
     }
     await validate(u, kind, e);
+    if (kind === 'course' && !input.id && e.title.trim() &&
+      (await rows(u, kind)).some(existing => courseContentKey(existing) === courseContentKey(e)))
+      fail('Este curso ya existe en esta ruta. Abre el curso existente para editarlo; no es necesario importarlo otra vez.', 409);
     if (kind === "simulator")
       e.questions = e.questions.map((q: any) => ({
         ...q,
@@ -427,7 +456,7 @@ export async function saveTraining(u: User, kind: string, input: any) {
         bankVersion: q.bankVersion || e.version,
       }));
     await validate(u, kind, e);
-    if (kind === "simulator" && e.status === "published") {
+    if (e.status === "published") {
       if ((await rows(u, kind)).some(x => x.id === e.id && x.version > e.version && x.status !== "draft"))
         fail("Hay una versión más reciente. Crea una nueva versión antes de publicar.", 409);
       for (const previous of (await rows(u, kind)).filter(x => x.id === e.id && x.version !== e.version && x.status === "published")) {
@@ -588,11 +617,13 @@ export async function trainingState(u: User) {
             .all(u.institutionId || "")) as any[]
         ).map(async (a) => await attemptView(u, a)),
       ),
-      users: await db
+      users: await Promise.all((await db
         .prepare(
           "SELECT id,name FROM users WHERE institutionId=? AND role='student' AND status='Activo'",
         )
-        .all(u.institutionId || ""),
+        .all(u.institutionId || "")).map(async (user: any) => ({
+          ...user, educationLevel: await studentEducationLevel(user),
+        }))),
       audit: await db
         .prepare(
           "SELECT * FROM training_audit WHERE org=? ORDER BY created_at DESC LIMIT 100",
@@ -1300,23 +1331,24 @@ export async function trainingAction(
   if (path === "training" && method === "GET") return await trainingState(u);
   if (path === "training/entity" && method === "POST")
     return await saveTraining(u, b.kind, b.entity);
-  if (path === "training/delete-simulator" && method === "POST") {
+  if (["training/delete-simulator", "training/delete-course"].includes(path) && method === "POST") {
     admin(u);
     return await tx(async () => {
-      const e = await entity(u, "simulator", b.id, b.version);
+      const kind = path === 'training/delete-course' ? 'course' : 'simulator';
+      const e = await entity(u, kind, b.id, b.version);
       if (e.revision !== b.revision)
-        fail("El simulador cambió. Actualiza el catálogo.", 409);
+        fail("El contenido cambió. Actualiza el catálogo.", 409);
       await db
         .prepare(
-          "DELETE FROM training_entities WHERE id=? AND kind='simulator'",
+          "DELETE FROM training_entities WHERE id=? AND kind=? AND org=?",
         )
-        .run(e.id);
+        .run(e.id, kind, u.institutionId || '');
       await db
         .prepare(
           "DELETE FROM training_mutations WHERE json_extract(result,'$.id')=?",
         )
         .run(e.id);
-      await audit(u, "Eliminar simulador", e.id, { version: e.version });
+      await audit(u, kind === 'course' ? 'Eliminar curso' : 'Eliminar simulador', e.id, { version: e.version });
       return { ok: true };
     });
   }

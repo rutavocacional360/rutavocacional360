@@ -1,6 +1,6 @@
 "use client";
 import {instrumentProblems} from '../../lib/test-engine';
-import {schoolModalityTarget} from '../../data/school-training';
+import {schoolModalityTarget,preparationLevel} from '../../data/school-training';
 import {autofillSimulator} from '../../lib/simulator-autofill';
 import {importSimulatorDocument} from '../../lib/import-simulator';
 import {DOCUMENT_ACCEPT,DOCUMENT_FORMAT_LABEL,DOCUMENT_FORMAT_HELP,documentFileError} from '../../lib/document-formats';
@@ -248,7 +248,7 @@ export function CourseEditor({
                 >
                   <option value="">Selecciona un simulador</option>
                   {d.simulators
-                    .filter((s: any) => s.status === "published")
+                    .filter((s: any) => s.status === "published" && preparationLevel(s.careerIds,s.educationLevel) === preparationLevel(c.careerIds,c.educationLevel || d.educationLevel))
                     .map((s: any) => (
                       <option
                         key={s.id + ":" + s.version}
@@ -336,7 +336,9 @@ export function CourseEditor({
       {c.access === "selected" && (
         <ChoiceList
           label="Destinatarios"
-          items={d.users}
+          items={d.users
+            .filter((user: any) => !user.educationLevel || user.educationLevel === (c.educationLevel || d.educationLevel) || c.studentIds.includes(user.id))
+            .map((user: any) => ({...user, name: user.educationLevel && user.educationLevel !== (c.educationLevel || d.educationLevel) ? user.name + ' (otra ruta educativa; retira esta selección)' : user.name}))}
           value={c.studentIds}
           onChange={(studentIds) => patch({ studentIds })}
         />

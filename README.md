@@ -83,6 +83,20 @@ de práctica no determinan la modalidad recomendada: la orientación utiliza los
 intereses entregados. Las relaciones con intereses y actividades son reglas
 internas; no son baremos acreditados por el Ministerio.
 
+Cursos y simuladores muestran una tarjeta por contenido, con sus versiones y
+borradores dentro de ella. Editar una publicación abre su borrador existente;
+publicar una nueva versión archiva la anterior. Los cursos permiten archivar,
+restaurar, eliminar un borrador o eliminar todo el curso con confirmación. La
+eliminación retira el catálogo y conserva los avances e informes ya registrados.
+Los registros independientes con el mismo título se señalan para revisión; una
+importación idéntica no crea otro curso. Los simuladores de un curso y sus
+destinatarios deben corresponder a su nivel educativo.
+
+La práctica independiente tiene sus propios intentos, separados de las actividades
+de los cursos. El autoguardado envía las respuestas en orden y las entregas
+recuperables permiten reintentar el cálculo sin perder respuestas. Si vence la
+sesión administrativa, se solicita acceso conservando el editor abierto.
+
 Los informes PDF individuales y de orientación siguen una sola ruta e incluyen
 las respuestas, puntuaciones y orientación guardada con el estado real de la IA.
 Las copias integrales anteriores siguen disponibles en el historial; los informes
@@ -98,6 +112,8 @@ Administración → Escuelas permite crear centros con código único (AMIE o in
 ciudad y contacto, editar sus datos, archivarlos y reactivarlos. Desde «Ver usuarios»
 se asignan estudiantes y orientadores existentes; los filtros permiten encontrar
 usuarios sin escuela o trasladarlos desde otro centro con confirmación.
+También permite eliminar una escuela con confirmación: se retiran su ficha y sus
+asignaciones, y se conservan las cuentas, los perfiles y los resultados.
 
 Cada usuario tiene como máximo una escuela asignada. Archivar conserva asignaciones
 y resultados, impide nuevas asignaciones y no suspende cuentas. El administrador
@@ -171,6 +187,12 @@ Los catálogos de evaluación y orientación son contenido del sistema, no regis
 Antes de publicar, ejecuta `npm test` (suites aisladas), `npm run build` y
 `npm run test:integration`. La integración usa SQLite temporal por defecto;
 con `GUIDANCE_DB_DRIVER=mysql` exige una base MySQL local terminada en `_test`.
+
+`node scripts/test-guidance-server.mjs --crud-visual --users-visual` comprueba en
+el navegador los formularios de usuarios y el ciclo completo de cursos de ambas
+rutas: creación, actividades, guardado, recarga, publicación, versiones,
+archivo, restauración y eliminación. Requiere la compilación y Playwright.
+
 `npm run test:startup` comprueba el arranque real, el puerto y la conservación del
 administrador al reiniciar por ambos caminos (`next start` y `npm start`); requiere una base MySQL local **nueva** terminada en
 `_test`, con sus variables `DB_*`. No uses cuentas ni bases de producción.

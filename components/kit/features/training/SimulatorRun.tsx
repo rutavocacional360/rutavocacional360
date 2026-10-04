@@ -42,6 +42,7 @@ export function SimulatorRun({
   latest.current = { answers, flags };
   const revision = useRef(initial.revision),
     saving = useRef<Promise<any> | null>(null);
+  const operations = useRef(0);
   useEffect(() => {
     if (!dirty || a.state !== "in_progress") return;
     const timer = setTimeout(
@@ -105,6 +106,7 @@ export function SimulatorRun({
       .catch((e) => setError(e.message));
   }, [remaining, a.id, a.state]);
   async function act(fn: () => Promise<void>) {
+    operations.current++;
     setBusy(true);
     setError("");
     try {
@@ -112,24 +114,30 @@ export function SimulatorRun({
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBusy(false);
+      operations.current--;
+      setBusy(operations.current > 0);
     }
   }
   async function save() {
-    if (saving.current) await saving.current;
-    const payload = latest.current;
-    const request = trainingApi(
-      "/answers",
-      { id: a.id, revision: revision.current, ...payload },
-      "PUT",
-    );
-    saving.current = request;
-    try {
-      const r = await request;
+    const previous = saving.current;
+    // Register the whole operation before awaiting the prior save. Multiple
+    // queued changes must read the revision returned by their own predecessor.
+    const request = (async () => {
+      if (previous) await previous.catch(() => undefined);
+      const payload = latest.current;
+      const r = await trainingApi(
+        "/answers",
+        { id: a.id, revision: revision.current, ...payload },
+        "PUT",
+      );
       revision.current = r.revision;
       setA(r);
       setDirty(JSON.stringify(payload) !== JSON.stringify(latest.current));
       return r;
+    })();
+    saving.current = request;
+    try {
+      return await request;
     } finally {
       if (saving.current === request) saving.current = null;
     }
@@ -139,6 +147,20 @@ export function SimulatorRun({
       <div className="training-runner">
         <TrainingResult attempt={a} />
         <Button onClick={onClose}>Volver a mis simuladores</Button>
+      </div>
+    );
+  if (a.state === "recoverable")
+    return (
+      <div className="training-runner">
+        <Card className="stack">
+          <h2>{a.instrument.title}</h2>
+          <Notice tone="warning">{a.error || "Tus respuestas están guardadas. Reintenta la entrega para calcular el resultado."}</Notice>
+          {error && <Notice tone="danger">{error}</Notice>}
+          <Button loading={busy} onClick={() => act(async () => {
+            setA(await trainingApi("/finish", { id: a.id }));
+          })}>Reintentar entrega</Button>
+          <Button variant="secondary" disabled={busy} onClick={onClose}>Volver a mis simuladores</Button>
+        </Card>
       </div>
     );
   return (

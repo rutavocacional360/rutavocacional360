@@ -317,6 +317,7 @@
 
 .simulator-import-file{display:grid;gap:18px;padding:24px;border:1px dashed var(--primary);border-radius:12px;background:var(--primary-soft);color:var(--ink)}.simulator-import-file{cursor:pointer}.simulator-import-file:focus-within{outline:3px solid var(--primary);outline-offset:3px}.simulator-import-file .button{justify-self:start}
 .simulator-import-file strong{min-width:0;overflow-wrap:anywhere}
+.simulator-import-file input[type="file"]{width:100%;min-width:0;max-width:100%}
 
 .simulator-manager .simulator-filters{grid-template-columns:minmax(0,2fr) minmax(160px,1fr) minmax(180px,1fr)}.simulator-manager .page-header>div:first-child{min-width:0}.simulator-manager .page-header>.row{flex-shrink:0}.simulator-manager .te-body{padding:22px;border:1px solid var(--border);border-radius:12px}.simulator-manager .te-footer{padding:14px;border-radius:12px}.simulator-manager .test-manager-card h2{font-size:17px}.simulator-manager .test-manager-card p{line-height:1.5}@media(max-width:800px){.simulator-manager .simulator-filters{grid-template-columns:1fr}.simulator-manager .te-body{padding:16px}}
 

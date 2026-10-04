@@ -7,6 +7,10 @@ import { db, document, put, fail, passwordHash } from "./store";
 import { instruments } from "@/components/kit/data/instruments";
 import { listGuidance } from "./guidance";
 export async function manageUser(admin: any, body: any) {
+  // Validation, mutations and audit share one lock to prevent duplicate creates.
+  return db.transaction(() => manageUserTransaction(admin, body));
+}
+async function manageUserTransaction(admin: any, body: any) {
   if (body.action !== undefined && !['delete','reset-password'].includes(body.action)) fail('Operación de usuario no válida.');
   for (const key of ['group','stage','institution']) {
     if (body[key] !== undefined && textProblem(body[key], key === 'institution' ? 180 : 100)) fail('Revisa grupo, etapa y centro educativo.');
@@ -37,72 +41,58 @@ export async function manageUser(admin: any, body: any) {
     if (body.password !== body.confirmPassword)
       fail("Las contraseñas no coinciden.");
     const hashed = passwordHash(body.password);
-    await db.exec("BEGIN IMMEDIATE");
-    try {
-      await db
-        .prepare("UPDATE users SET password=? WHERE id=?")
-        .run(hashed, existing.id);
-      await db.prepare("DELETE FROM sessions WHERE userId=?").run(existing.id);
-      await db.prepare("DELETE FROM resets WHERE userId=?").run(existing.id);
-      await put(
-        "institution:" + admin.institutionId,
-        "rv360:audit",
-        [
-          {
-            name: admin.name,
-            action: "Restablecer contraseña de usuario",
-            entity: existing.id,
-            created_at: new Date().toISOString(),
-          },
-          ...(await document(
-            "institution:" + admin.institutionId,
-            "rv360:audit",
-            [],
-          )),
-        ].slice(0, 1000),
-      );
-      await db.exec("COMMIT");
-    } catch (e) {
-      await db.exec("ROLLBACK");
-      throw e;
-    }
+    await db
+      .prepare("UPDATE users SET password=? WHERE id=?")
+      .run(hashed, existing.id);
+    await db.prepare("DELETE FROM sessions WHERE userId=?").run(existing.id);
+    await db.prepare("DELETE FROM resets WHERE userId=?").run(existing.id);
+    await put(
+      "institution:" + admin.institutionId,
+      "rv360:audit",
+      [
+        {
+          name: admin.name,
+          action: "Restablecer contraseña de usuario",
+          entity: existing.id,
+          created_at: new Date().toISOString(),
+        },
+        ...(await document(
+          "institution:" + admin.institutionId,
+          "rv360:audit",
+          [],
+        )),
+      ].slice(0, 1000),
+    );
     return { ok: true };
   }
   if (body.action === "delete") {
     if (!existing) fail("Usuario no disponible.", 404);
-    await db.exec("BEGIN IMMEDIATE");
-    try {
-      // Keep submitted work and report history, including legacy training-only
-      // accounts. Unsubmitted attempts are drafts and may be removed together.
-      const retainedWork = [
-        "SELECT id FROM submissions WHERE user_id=? LIMIT 1",
-        "SELECT id FROM guidance_reports WHERE user_id=? LIMIT 1",
-        "SELECT id FROM orientation_reports WHERE user_id=? LIMIT 1",
-        "SELECT submission_id FROM released_results WHERE released_by=? LIMIT 1",
-        "SELECT id FROM training_attempts WHERE user_id=? AND state IN ('graded','pending-review') LIMIT 1",
-        "SELECT r.attempt_id FROM training_results r JOIN training_attempts a ON a.id=r.attempt_id WHERE a.user_id=? LIMIT 1",
-        "SELECT c.enrollment_id FROM training_completions c JOIN training_enrollments e ON e.id=c.enrollment_id WHERE e.user_id=? LIMIT 1",
-      ];
-      for (const query of retainedWork) {
-        if (await db.prepare(query).get(existing.id))
-          fail("Este usuario tiene evaluaciones, actividades o informes guardados. Suspende su acceso para conservar su historial.", 409);
-      }
-      for (const table of ["sessions", "resets"])
-        await db
-          .prepare("DELETE FROM " + table + " WHERE userId=?")
-          .run(existing.id);
-      await db.prepare("DELETE FROM assessment_attempts WHERE user_id=?").run(existing.id);
-      await db.prepare("DELETE FROM training_feedback WHERE attempt_id IN (SELECT id FROM training_attempts WHERE user_id=?)").run(existing.id);
-      await db.prepare("DELETE FROM training_attempts WHERE user_id=?").run(existing.id);
-      await db.prepare("DELETE FROM training_enrollments WHERE user_id=?").run(existing.id);
-      await db.prepare("DELETE FROM documents WHERE owner=?").run(existing.id);
-      await db.prepare("DELETE FROM documents WHERE owner=? AND key=?").run('school-members:'+admin.institutionId,existing.id);
-      await db.prepare("DELETE FROM users WHERE id=?").run(existing.id);
-      await db.exec("COMMIT");
-    } catch (e) {
-      await db.exec("ROLLBACK");
-      throw e;
+    // Keep submitted work and report history, including legacy training-only
+    // accounts. Unsubmitted attempts are drafts and may be removed together.
+    const retainedWork = [
+      "SELECT id FROM submissions WHERE user_id=? LIMIT 1",
+      "SELECT id FROM guidance_reports WHERE user_id=? LIMIT 1",
+      "SELECT id FROM orientation_reports WHERE user_id=? LIMIT 1",
+      "SELECT submission_id FROM released_results WHERE released_by=? LIMIT 1",
+      "SELECT id FROM training_attempts WHERE user_id=? AND state IN ('graded','pending-review') LIMIT 1",
+      "SELECT r.attempt_id FROM training_results r JOIN training_attempts a ON a.id=r.attempt_id WHERE a.user_id=? LIMIT 1",
+      "SELECT c.enrollment_id FROM training_completions c JOIN training_enrollments e ON e.id=c.enrollment_id WHERE e.user_id=? LIMIT 1",
+    ];
+    for (const query of retainedWork) {
+      if (await db.prepare(query).get(existing.id))
+        fail("Este usuario tiene evaluaciones, actividades o informes guardados. Suspende su acceso para conservar su historial.", 409);
     }
+    for (const table of ["sessions", "resets"])
+      await db
+        .prepare("DELETE FROM " + table + " WHERE userId=?")
+        .run(existing.id);
+    await db.prepare("DELETE FROM assessment_attempts WHERE user_id=?").run(existing.id);
+    await db.prepare("DELETE FROM training_feedback WHERE attempt_id IN (SELECT id FROM training_attempts WHERE user_id=?)").run(existing.id);
+    await db.prepare("DELETE FROM training_attempts WHERE user_id=?").run(existing.id);
+    await db.prepare("DELETE FROM training_enrollments WHERE user_id=?").run(existing.id);
+    await db.prepare("DELETE FROM documents WHERE owner=?").run(existing.id);
+    await db.prepare("DELETE FROM documents WHERE owner=? AND key=?").run('school-members:'+admin.institutionId,existing.id);
+    await db.prepare("DELETE FROM users WHERE id=?").run(existing.id);
   } else {
     const name = normalizeName(String(body.name || "")),
       email = String(body.email || "")
@@ -133,61 +123,54 @@ export async function manageUser(admin: any, body: any) {
       passwordProblem(body.password)
     )
       fail("Define una contraseña inicial de al menos 15 caracteres.");
-    await db.exec("BEGIN IMMEDIATE");
-    try {
-      const id = existing?.id || randomUUID();
-      if (existing) {
-        await db
-          .prepare(
-            "UPDATE users SET name=?,email=?,role=?,groupName=?,status=? WHERE id=?",
-          )
-          .run(name, email, role, group, body.status, id);
-        if (
-          existing.email !== email ||
-          existing.role !== role ||
-          body.status !== "Activo"
-        ) {
-          await db.prepare("DELETE FROM sessions WHERE userId=?").run(id);
-          await db.prepare("DELETE FROM resets WHERE userId=?").run(id);
-        }
-      } else
-        await db
-          .prepare("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)")
-          .run(
-            id,
-            name,
-            email,
-            passwordHash(body.password),
-            role,
-            admin.institutionId,
-            group,
-            body.status,
-          );
-      const profile = await document(id, "rv360:profile", {});
-      if (existing?.name !== name) {
-        delete profile.firstName;
-        delete profile.lastName;
+    const id = existing?.id || randomUUID();
+    if (existing) {
+      await db
+        .prepare(
+          "UPDATE users SET name=?,email=?,role=?,groupName=?,status=? WHERE id=?",
+        )
+        .run(name, email, role, group, body.status, id);
+      if (
+        existing.email !== email ||
+        existing.role !== role ||
+        body.status !== "Activo"
+      ) {
+        await db.prepare("DELETE FROM sessions WHERE userId=?").run(id);
+        await db.prepare("DELETE FROM resets WHERE userId=?").run(id);
       }
-      const nextProfile = {
-        ...profile,
-        name,
-        email,
-        stage:
-          typeof body.stage === "string"
-            ? body.stage.slice(0, 100)
-            : profile.stage || "",
-        institution:
-          typeof body.institution === "string"
-            ? body.institution.slice(0, 120)
-            : profile.institution || "",
-      };
-      if(existing&&role==='student')await transitionStudentRoute(id,profile,nextProfile);
-      await put(id, "rv360:profile", nextProfile);
-      await db.exec("COMMIT");
-    } catch (e) {
-      await db.exec("ROLLBACK");
-      throw e;
+    } else
+      await db
+        .prepare("INSERT INTO users VALUES(?,?,?,?,?,?,?,?)")
+        .run(
+          id,
+          name,
+          email,
+          passwordHash(body.password),
+          role,
+          admin.institutionId,
+          group,
+          body.status,
+        );
+    const profile = await document(id, "rv360:profile", {});
+    if (existing?.name !== name) {
+      delete profile.firstName;
+      delete profile.lastName;
     }
+    const nextProfile = {
+      ...profile,
+      name,
+      email,
+      stage:
+        typeof body.stage === "string"
+          ? body.stage.slice(0, 100)
+          : profile.stage || "",
+      institution:
+        typeof body.institution === "string"
+          ? body.institution.trim()
+          : profile.institution || "",
+    };
+    if(existing&&role==='student')await transitionStudentRoute(id,profile,nextProfile);
+    await put(id, "rv360:profile", nextProfile);
   }
   await put(
     "institution:" + admin.institutionId,

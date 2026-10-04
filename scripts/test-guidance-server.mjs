@@ -91,7 +91,7 @@ try{
  writeFileSync(resolve(folder,'report.json'),JSON.stringify(second));
  console.log('PASS server: separate school/university routes, graduation requires new university assessments, persisted profile, digest updates after review, authorized history and withheld results.');
  console.log('PDF fixture: '+pdfPath);
- if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')||process.argv.includes('--completion-visual')){
+ if(process.argv.includes('--http')||process.argv.includes('--visual')||process.argv.includes('--admin-visual')||process.argv.includes('--users-visual')||process.argv.includes('--completion-visual')||process.argv.includes('--crud-visual')){
   await db.prepare('DELETE FROM assessment_results WHERE submission_id=?').run('pending_test');
   await db.prepare('DELETE FROM submissions WHERE id=?').run('pending_test');
   const password=randomBytes(24).toString('base64url');
@@ -196,6 +196,10 @@ try{
    if(process.argv.includes('--users-visual')){
     const {runAdminUsersVisual}=await import('./test-admin-users-visual.mjs');
     await runAdminUsersVisual({base,password,folder});
+   }
+   if(process.argv.includes('--crud-visual')){
+    const {runAdminCourseCrudVisual}=await import('./test-admin-course-crud-visual.mjs');
+    await runAdminCourseCrudVisual({base,password,folder});
    }
   }finally{child.kill();await stopped;}
  }

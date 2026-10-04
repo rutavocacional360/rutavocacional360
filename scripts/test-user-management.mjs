@@ -9,9 +9,9 @@ const folder=mkdtempSync(resolve('.qa-tools','users-'));
 process.env.DB_DRIVER='sqlite';process.env.DATABASE_PATH=resolve(folder,'users.sqlite');
 process.env.ACADEMIC_CONTENT_PATH=resolve(folder,'academic.json');
 const outfile=resolve(folder,'server.cjs');
-await build({stdin:{contents:`export {db,put} from './lib/server/store'; export {manageUser} from './lib/server/admin-management'; export {startTest} from './lib/server/test-attempts';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
+await build({stdin:{contents:`export {db,put} from './lib/server/store'; export {manageUser} from './lib/server/admin-management'; export {startTest} from './lib/server/test-attempts';export {saveTraining,trainingState} from './lib/server/training';`,resolveDir:process.cwd(),loader:'ts'},bundle:true,platform:'node',format:'cjs',packages:'external',outfile,
   plugins:[{name:'server-marker',setup(b){b.onResolve({filter:/^server-only$/},()=>({path:'server-only',namespace:'empty'}));b.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
-const {db,put,manageUser,startTest}=createRequire(import.meta.url)(outfile);
+const {db,put,manageUser,startTest,saveTraining,trainingState}=createRequire(import.meta.url)(outfile);
 const admin={id:'admin',name:'Administrador QA',role:'admin',institutionId:'org'};
 async function user(id) {
   const student={id,name:'Estudiante de prueba',role:'student',institutionId:'org'};
@@ -28,6 +28,30 @@ async function trainingDraft(student,state='in_progress') {
 try {
   await db.migrate();await db.prepare('INSERT INTO institutions VALUES(?,?,?)').run('org','QA','QA');
   await db.prepare('INSERT INTO users VALUES(?,?,?,?,?,?,?,?)').run(admin.id,admin.name,'admin@example.test','no-login','admin','org','','Activo');
+  const institution='Centro educativo '+ 'a'.repeat(150);
+  const create={name:'Estudiante Concurrente',email:'concurrent@example.test',password:'password-long-enough-for-qa',role:'Estudiante',status:'Activo',group:'',stage:'Estoy eligiendo mi bachillerato',institution};
+  const creates=await Promise.allSettled([manageUser(admin,create),manageUser(admin,create)]);
+  assert.equal(creates.filter(r=>r.status==='fulfilled').length,1,'One of two simultaneous creates must succeed');
+  assert.equal(creates.find(r=>r.status==='rejected').reason.status,409,'Duplicate creation returns a useful conflict instead of a database error');
+  const created=await db.prepare('SELECT * FROM users WHERE email=?').get(create.email);
+  assert.equal(JSON.parse((await db.prepare('SELECT value FROM documents WHERE owner=? AND key=?').get(created.id,'rv360:profile')).value).institution,institution,'A valid center name longer than 120 characters is not truncated');
+  const parallel=await Promise.allSettled(['Uno','Dos'].map((name,index)=>manageUser(admin,{...create,name:'Estudiante '+name,email:'parallel-'+index+'@example.test'})));
+  assert(parallel.every(r=>r.status==='fulfilled'));
+  const audit=JSON.parse((await db.prepare('SELECT value FROM documents WHERE owner=? AND key=?').get('institution:org','rv360:audit')).value);
+  assert.equal(audit.filter(e=>e.action==='Crear usuario').length,3,'Concurrent changes retain every audit entry');
+  await manageUser(admin,{action:'delete',id:created.id});
+  const school=await user('audience-school'),university=await user('audience-university');
+  await put(university.id,'rv360:profile',{stage:'Busco mi primera carrera universitaria'});
+  const directory=(await trainingState(admin)).users;
+  assert.equal(directory.find(student=>student.id===school.id).educationLevel,'bachillerato');
+  assert.equal(directory.find(student=>student.id===university.id).educationLevel,'universidad');
+  for(const [educationLevel,allowed,wrong] of [['bachillerato',school,university],['universidad',university,school]]){
+    const draft=await saveTraining(admin,'course',{id:'',version:0,revision:0,status:'draft',educationLevel,title:'Destinatarios '+educationLevel,description:'Programa de orientación',objectives:'Explorar intereses',type:'general',level:'Introductorio',careerIds:[],fields:[],institutions:[],access:'selected',studentIds:[wrong.id],activities:[{id:'reading',module:'Inicio',title:'Reflexión',kind:'text',content:'Escribe tus intereses.',required:true,completion:'read'}]});
+    await assert.rejects(saveTraining(admin,'course',{...draft,status:'published'}),/misma ruta educativa/,'Publication rejects students of the opposite route');
+    const published=await saveTraining(admin,'course',{...draft,status:'published',studentIds:[allowed.id]});
+    assert.equal(published.status,'published');
+  }
+  console.log('PASS course audiences: profile routes included in directory; drafts remain editable, publication accepts matching routes and rejects cross-route recipients.');
   const student=await user('draft-user');
   const started=await db.context(()=>startTest(student,'intereses'));
   assert(started.id);assert.equal(await db.prepare('SELECT id FROM submissions WHERE user_id=?').get(student.id),undefined);

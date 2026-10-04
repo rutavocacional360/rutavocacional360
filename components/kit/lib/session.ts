@@ -1,6 +1,7 @@
 "use client";
 import { useSyncExternalStore } from 'react';
 import {readApiResponse} from './api-response';
+import {adminFetch,renewAdminSession} from './admin-session';
 import { configureInstruments } from '../data/instruments';
 import { configureCatalog } from './catalog';
 export type SessionUser={id:string;name:string;email:string;role:'student'|'orientador'|'admin';institutionId:string|null;group:string};
@@ -13,15 +14,35 @@ const update=(patch:Partial<Snapshot>)=>{state={...state,...patch};listeners.for
 const subscribe=(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
 export function useSession(){return useSyncExternalStore(subscribe,()=>state,()=>serverState);}
 export function getSession(){return state;}
-async function request(path:string,options:RequestInit={}){const response=await fetch('/api/'+path,{...options,headers:{'Content-Type':'application/json',...options.headers},cache:'no-store'});return readApiResponse(response);}
+async function request(path:string,options:RequestInit={}){
+ const send=state.user?.role==='admin'&&!path.startsWith('auth/')?adminFetch:fetch;
+ const response=await send('/api/'+path,{...options,headers:{'Content-Type':'application/json',...options.headers},cache:'no-store'});
+ return readApiResponse(response);
+}
 export async function refreshSession(){
  const generation=mutation,sequence=++refreshSequence;
  const stale=()=>generation!==mutation||sequence!==refreshSequence||state.pending>0;
  try{
-  const data=await request('session');
+  let data=await request('session');
   if(stale())return;
+  if(state.user?.role==='admin'&&!data.user){
+   // Session reads return 200 even after expiry. Keep the mounted editor while
+   // the administrator restores access, just as mutation requests already do.
+   await renewAdminSession();
+   if(stale())return;
+   data=await request('session');
+   if(stale())return;
+   if(!data.user)throw new Error('No se pudo recuperar la sesión. Vuelve a confirmar tu acceso.');
+  }
   configureCatalog(data.values['rv360:published-content']||[]);
   configureInstruments(data.values['rv360:battery']?.instruments.filter((t:any)=>['intereses','valores','autoconocimiento'].includes(t.id)));
+  // A refresh must not replace an unsaved draft or advance its conflict revision.
+  if(data.user?.id===state.user?.id){
+   for(const [key,value] of failed){
+    data.values[key]=value;
+    data.revisions[key]=state.revisions[key]||0;
+   }
+  }
   update({...data,ready:true,error:failed.size?state.error:'',serviceAvailable:data.serviceAvailable!==false});
  }catch(e){if(!stale())update({ready:true,error:(e as Error).message});}
 }

@@ -51,7 +51,18 @@ export async function schoolAction(user:any,path:string,method:string,body:any,p
    return {school,items:rows.map(({assignment,...row})=>({...row,schoolId:assignment?JSON.parse(assignment):null})),total,page,pages:Math.max(1,Math.ceil(total/limit))};
   }
  }
+ if(path==='admin/schools'&&method==='POST'&&body.action==='delete')return db.transaction(async()=>{
+  const id=field(body.id,'el identificador',100,true),school=await read(id);
+  if(body.revision!==school.revision)fail('La escuela cambió. Recarga antes de eliminar.',409);
+  // Removing directory metadata never removes accounts, profiles or work.
+  await db.prepare('DELETE FROM documents WHERE owner=? AND value=?').run(owner.members,JSON.stringify(id));
+  await db.prepare('DELETE FROM documents WHERE owner=? AND key=?').run(owner.codes,school.code);
+  await db.prepare('DELETE FROM documents WHERE owner=? AND key=?').run(owner.schools,id);
+  await audit('Eliminar escuela',id);
+  return {ok:true};
+ });
  if(path==='admin/schools'&&method==='POST')return db.transaction(async()=>{
+  if(body.action!==undefined)fail('Operación de escuelas no válida.');
   const id=body.id===undefined?randomUUID():field(body.id,'el identificador',100,true);
   const previous=body.id===undefined?null:await read(id);
   if(previous&&body.revision!==previous.revision)fail('La escuela cambió. Recarga antes de guardar.',409);

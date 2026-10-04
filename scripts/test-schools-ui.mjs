@@ -24,10 +24,10 @@ globalThis.__schoolsRequest=async(url,options={})=>{
  if(failure)return Response.json({error:'Error de prueba'},{status:503});
  if(options.method==='POST'){
   const body=JSON.parse(options.body);
-  if(url.endsWith('/assign'))member={...member,schoolId:body.schoolId};else school={...body,revision:school.revision+1};
+  if(url.endsWith('/assign'))member={...member,schoolId:body.schoolId};else if(body.action==='delete')school=null;else school={...body,revision:school.revision+1};
   return Response.json({ok:true,school});
  }
- return Response.json(url.includes('/members')?{school,items:[member],total:1,pages:1}:{items:[school],total:1,pages:1});
+ return Response.json(url.includes('/members')?{school,items:[member],total:1,pages:1}:{items:school?[school]:[],total:school?1:0,pages:1});
 };
 const root=createRoot(document.getElementById('root'));
 const click=async(text)=>act(async()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent===text);assert(b,'Missing '+text);b.dispatchEvent(new window.Event('click',{bubbles:true}));});
@@ -48,5 +48,17 @@ try{
  failure=false;await click('Reintentar');assert(document.body.textContent.includes('Escuela QA'));
  await click('Crear escuela');assert(document.querySelector('[role="dialog"] input[required]'));
  await click('Cancelar');assert(!document.querySelector('[role="dialog"]'));
- console.log('PASS schools UI: directory, edit/revision, members, confirmation before assignment, recovery and create/cancel.');
+ const deletionRequests=()=>requests.filter(r=>r.options.body&&JSON.parse(r.options.body).action==='delete');
+ await click('Eliminar');assert(document.querySelector('[role="dialog"][aria-label="Eliminar escuela"]'));
+ assert.equal(deletionRequests().length,0,'Opening confirmation must not delete');
+ await click('Cancelar');assert(!document.querySelector('[role="dialog"]'));
+ assert.equal(deletionRequests().length,0,'Cancellation must not delete');
+ await click('Eliminar');failure=true;
+ await click('Confirmar eliminación');assert(document.querySelector('[role="dialog"]'),'Failure keeps confirmation available to retry');
+ assert(document.querySelector('[role="dialog"]').textContent.includes('Error de prueba'));
+ failure=false;await click('Confirmar eliminación');
+ assert(!document.querySelector('[role="dialog"]'));
+ assert(document.body.textContent.includes('No hay escuelas en esta lista'));
+ assert.deepEqual(JSON.parse(deletionRequests().at(-1).options.body),{action:'delete',id:'school',revision:2});
+ console.log('PASS schools UI: directory, edit/revision, members, assignment confirmation, error recovery, create/cancel and confirmed deletion with retry.');
 }finally{await act(async()=>root.unmount());}
