@@ -38,6 +38,7 @@ import { courseContentKey, simulatorContentKey } from "@/components/kit/lib/trai
 import {schoolTrainingTargets,schoolPreparationRecommendations,schoolTarget,schoolModalityTarget,preparationLevel,trainingTargetMatches} from '@/components/kit/data/school-training';
 import { activityResponseProblem } from '@/components/kit/lib/activity-responses';
 import { validateActivityAttachments } from './training-media';
+import { validateYouTubeVideos } from '@/components/kit/lib/activity-youtube';
 
 // Additive migration. Published content and enrolled itineraries are immutable snapshots.
 type User = {
@@ -186,6 +187,12 @@ async function validate(u: User, kind: string, e: any) {
       (a.responsePrompt !== undefined && (typeof a.responsePrompt !== 'string' || a.responsePrompt.length > 5000))))
       fail('La pregunta de una actividad admite hasta 5.000 caracteres.');
     await validateActivityAttachments(u, e.activities);
+    for (const activity of e.activities) {
+      try {
+        const videos = validateYouTubeVideos(activity.youtubeVideos);
+        if (videos !== undefined) activity.youtubeVideos = videos;
+      } catch (error) { fail((error as Error).message); }
+    }
   }
   if (e.status !== "published") return;
   if (e.careerIds !== undefined && !Array.isArray(e.careerIds)) fail('Revisa las opciones de estudio.');
@@ -372,7 +379,7 @@ async function validate(u: User, kind: string, e: any) {
         fail("El simulador debe corresponder a la misma convocatoria.");
     } else if (
       a.completion !== "read" ||
-      (!a.content?.trim() && !a.attachments?.length) ||
+      (!a.content?.trim() && !a.attachments?.length && !a.youtubeVideos?.length) ||
       (a.kind === "link" && !/^https:\/\//.test(a.content))
     )
       fail("Completa la lectura o un enlace HTTPS y confirmación de lectura.");

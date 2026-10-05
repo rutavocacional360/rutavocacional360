@@ -8,6 +8,7 @@ import {PresentationEditor} from '../../components/domain/PresentationEditor';
 import {suggestSimulatorCareers} from "../../lib/simulator-careers";
 import { AcademicQuestionSettings } from "./AcademicQuestionSettings";
 import { ActivityMediaEditor } from "./ActivityMedia";
+import { ActivityYouTubeEditor } from "./ActivityYouTube";
 import { useState, useEffect, useRef } from "react";
 import {
   Button,
@@ -323,6 +324,7 @@ export function CourseEditor({
               if (busy) uploadingActivities.current.add(a.id); else uploadingActivities.current.delete(a.id);
               onBusyChange?.(uploadingActivities.current.size > 0);
             }}/>
+            <ActivityYouTubeEditor videos={a.youtubeVideos} onChange={youtubeVideos => update({youtubeVideos})}/>
             <label className="activity-authoring-required">
               <input
                 type="checkbox"

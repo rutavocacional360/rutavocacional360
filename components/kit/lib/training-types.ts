@@ -16,6 +16,7 @@ export type Activity = {
   content: string;
   responsePrompt?: string;
   attachments?: ActivityAttachment[];
+  youtubeVideos?: ActivityYouTubeVideo[];
   simulatorId?: string;
   simulatorVersion?: number;
   required: boolean;
@@ -27,6 +28,11 @@ export type ActivityAttachment = {
   name: string;
   mimeType: string;
   size: number;
+};
+export type ActivityYouTubeVideo = {
+  videoId: string;
+  title: string;
+  startSeconds?: number;
 };
 export type ActivityResponse = {
   answers: Record<string, string>;

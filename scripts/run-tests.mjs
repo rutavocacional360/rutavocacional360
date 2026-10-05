@@ -8,6 +8,7 @@ const tests = [
   'test-training-readiness.mjs',
   'test-training-ui.mjs', 'test-training-summary.mjs', 'test-simulator-workflows.mjs', 'test-admin-course-navigation.mjs', 'test-admin-ai-ui.mjs',
   'test-activity-responses.mjs', 'test-activity-responses-ui.mjs', 'test-training-media.mjs', 'test-training-media-ui.mjs',
+  'test-activity-youtube.mjs', 'test-activity-youtube-ui.mjs',
   'test-ai-flows.mjs', 'test-test-autofill.mjs', 'test-student-guidance-ai.mjs',
   'test-validation.mjs',
   'test-user-management.mjs',

@@ -36,5 +36,27 @@ export async function runTrainingMediaHttp({base, adminCookie, studentCookie}) {
   await json('training/archive', {kind: 'course', id: course.id, version: course.version, revision: course.revision});
   const archived = await fetch(url(file.id), {headers: {Cookie: studentCookie}});
   assert.equal(archived.status, 200); await archived.arrayBuffer();
+  const youtubeInput = {id: '', version: 0, revision: 0, status: 'published', title: 'Curso solo YouTube HTTP', description: 'Mira y reflexiona', objectives: 'Explorar tus intereses', educationLevel: state.educationLevel, level: 'Inicial', type: 'general', careerIds: [], institutions: [], fields: [], access: 'all', studentIds: [], activities: [{id: 'youtube-activity', module: 'Explorar', title: 'Video sobre intereses', kind: 'text', content: '', youtubeVideos: [{videoId: 'dQw4w9WgXcQ', title: '  Mi video  ', startSeconds: 90, src: 'https://untrusted.example/embed'}], required: true, completion: 'read'}]};
+  const expectedVideos = [{videoId: 'dQw4w9WgXcQ', title: 'Mi video', startSeconds: 90}];
+  const youtubeCourse = await json('training/entity', {kind: 'course', entity: youtubeInput});
+  assert.deepEqual(youtubeCourse.activities[0].youtubeVideos, expectedVideos, 'Only canonical video metadata is persisted; no arbitrary iframe URL');
+  const youtubeEnrollment = await json('training/enroll', {courseId: youtubeCourse.id}, studentCookie);
+  assert.deepEqual(youtubeEnrollment.snapshot.activities[0].youtubeVideos, expectedVideos, 'The student receives the published YouTube material without uploaded files or text');
+  const attemptSave = (entity, cookie = adminCookie) => fetch(base + '/api/training/entity', {method: 'POST', headers: {Origin: base, Cookie: cookie, 'Content-Type': 'application/json'}, body: JSON.stringify({kind: 'course', entity})});
+  for (const status of ['draft', 'published']) for (const videos of [
+    '<iframe src="https://untrusted.example"></iframe>', [{videoId: 'https://untrusted.example'}],
+    [{videoId: 'dQw4w9WgXcQ'}, {videoId: 'dQw4w9WgXcQ'}], [{videoId: 'dQw4w9WgXcQ', startSeconds: -1}],
+    [{videoId: 'dQw4w9WgXcQ', startSeconds: 86401}], Array(13).fill({videoId: 'dQw4w9WgXcQ'}),
+  ]) {
+    const invalid = {...youtubeInput, title: 'YouTube inválido ' + status, status, activities: [{...youtubeInput.activities[0], youtubeVideos: videos}]};
+    const rejected = await attemptSave(invalid);
+    assert.equal(rejected.status, 400, 'Validate YouTube metadata on every ' + status + ' save'); await rejected.arrayBuffer();
+  }
+  const forbidden = await attemptSave({...youtubeInput, title: 'Edición del estudiante'}, studentCookie);
+  assert.equal(forbidden.status, 403); await forbidden.arrayBuffer();
+  await json('training/archive', {kind: 'course', id: youtubeCourse.id, version: youtubeCourse.version, revision: youtubeCourse.revision});
+  const historical = await json('training/enroll', {courseId: youtubeCourse.id}, studentCookie);
+  assert.deepEqual(historical.snapshot.activities[0].youtubeVideos, expectedVideos, 'Archived publications preserve enrolled video metadata');
   console.log('PASS HTTP course media: authenticated admin upload, CSRF/format rejection, publication, enrollment, image bytes, video Range/HEAD and archived snapshot access.');
+  console.log('PASS HTTP YouTube: video-only publication, canonical metadata, student snapshot, invalid drafts/publications rejected, admin-only edits and archived enrollment continuity.');
 }

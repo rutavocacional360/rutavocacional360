@@ -15,7 +15,8 @@ export function proxy(request: NextRequest) {
     `connect-src 'self' blob:${dev ? ' ws: wss:' : ''}`,
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
-    "frame-src 'self' blob:",
+    // External course videos use only YouTube's privacy-enhanced embed origin.
+    "frame-src 'self' blob: https://www.youtube-nocookie.com",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",

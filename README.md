@@ -138,6 +138,18 @@ termine la carga. Para varias respuestas, deja vacía la consigna única y escri
 las preguntas con signos de interrogación en las instrucciones. Los videos,
 imágenes y audios tienen vista previa; todos los materiales pueden descargarse.
 
+También puedes añadir hasta 12 videos de YouTube por actividad: pega el enlace en
+«Enlace de YouTube», escribe un título opcional y pulsa «Añadir video de YouTube».
+Guarda el borrador o publica el curso para conservararlos. Admite enlaces normales,
+cortos, Shorts y directos; los videos aparecen en la revisión administrativa, en
+la actividad del estudiante y en el recuento de materiales del inicio. No requieren
+subir el archivo ni una clave de API. «Abrir en YouTube» permite consultar el video
+si su propietario restringe la reproducción integrada.
+
+El reproductor usa `youtube-nocookie.com` y permite únicamente ese origen externo
+en `frame-src`. Cada iframe envía solo el origen mediante su `referrerPolicy`, según
+la [documentación del reproductor de YouTube](https://developers.google.com/youtube/terms/required-minimum-functionality#embedded-player-api-client-identity).
+
 Después de compilar, `npm run test:integration` comprueba publicación, respuestas,
 matrículas, permisos y materiales por HTTP en una instalación aislada.
 `npm run test:activities` añade la prueba visual de carga y reproducción real de

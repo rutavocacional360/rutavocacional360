@@ -20,6 +20,10 @@ export function courseMaterials(activities: Activity[]) {
   const seen = new Set<string>();
   for (const activity of activities) {
     if (activity.kind === "link") counts.link++;
+    for (const video of activity.youtubeVideos || []) {
+      const key = "youtube:" + video.videoId;
+      if (!seen.has(key)) { seen.add(key); counts.video++; }
+    }
     for (const attachment of activity.attachments || []) {
       if (seen.has(attachment.id)) continue;
       seen.add(attachment.id);

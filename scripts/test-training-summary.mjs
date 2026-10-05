@@ -29,8 +29,9 @@ try {
   globalThis.__summaryError='';
 
   const initial=course('curso & importante','universidad');
-  const next=activity('reflexión / guardada',{title:'Mi reflexión pendiente',attachments:[media('video','video/mp4'),media('imagen','image/png'),media('audio','audio/mpeg'),media('pdf','application/pdf')]});
-  const snapshot={...initial,title:'Mi curso matriculado',activities:[activity('primera'),next,activity('extra',{required:false,kind:'link',content:'https://example.test'}),activity('imagen extra',{required:false,attachments:[media('imagen','image/png')]})]};
+  const youtube={videoId:'M7lc1UVf-VE',title:'YouTube'};
+  const next=activity('reflexión / guardada',{title:'Mi reflexión pendiente',attachments:[media('video','video/mp4'),media('imagen','image/png'),media('audio','audio/mpeg'),media('pdf','application/pdf')],youtubeVideos:[youtube]});
+  const snapshot={...initial,title:'Mi curso matriculado',activities:[activity('primera'),next,activity('extra',{required:false,kind:'link',content:'https://example.test'}),activity('imagen extra',{required:false,attachments:[media('imagen','image/png')],youtubeVideos:[youtube]})]};
   const enrollment={id:'enrolled',course_id:initial.id,snapshot,completed:['primera','id-histórico-inexistente'],next,responses:{[next.id]:{answers:{reflection:'Mi respuesta personal'},revision:1}}};
   globalThis.__summaryData={...base,courses:[{...initial,title:'Título versión nueva',version:2,activities:[activity('nueva')]},course('otro nivel','bachillerato')],enrollments:[enrollment]};
   let model=trainingSummaryModel(globalThis.__summaryData,'universidad');
@@ -39,7 +40,7 @@ try {
   assert.equal(model.courses[0].next.id,next.id);
   assert.equal(model.courses[0].hasDraft,true);
   assert.equal(model.courses[0].href,courseActivityHref(initial.id,next.id));
-  assert.deepEqual(courseMaterials(snapshot.activities).map(({key,count})=>[key,count]),[['video',1],['image',1],['audio',1],['document',1],['link',1]],'Repeated attachment references are counted once');
+  assert.deepEqual(courseMaterials(snapshot.activities).map(({key,count})=>[key,count]),[['video',2],['image',1],['audio',1],['document',1],['link',1]],'Uploaded videos and YouTube videos are included once each, even when shared across activities');
   let document=render();
   assert(document.textContent.includes('Mi curso matriculado'));
   assert(!document.textContent.includes('Título versión nueva')&&!document.textContent.includes('otro nivel'));
@@ -49,7 +50,7 @@ try {
   assert.equal(document.querySelector('progress').getAttribute('max'),'4');
   const continueLink=document.querySelector('a[aria-label^="Continuar actividad"]');
   assert.equal(continueLink.getAttribute('href'),'/mi-ruta/cursos?curso=curso%20%26%20importante&actividad=reflexi%C3%B3n%20%2F%20guardada');
-  assert(document.textContent.includes('1 video')&&document.textContent.includes('1 imagen')&&document.textContent.includes('1 documento'));
+  assert(document.textContent.includes('2 videos')&&document.textContent.includes('1 imagen')&&document.textContent.includes('1 documento'));
 
   globalThis.__summaryData={...globalThis.__summaryData,readiness:{...base.readiness,universidad:{ready:false,total:3,completed:1}}};
   document=render();

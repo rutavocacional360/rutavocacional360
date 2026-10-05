@@ -11,10 +11,28 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
   const browser = await playwright.chromium.launch({headless: true, ...(process.platform === 'win32' ? {executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe'} : {})});
   const adminContext = await browser.newContext({viewport: {width: 1440, height: 1000}});
   const studentContext = await browser.newContext({viewport: {width: 375, height: 812}});
-  const admin = await adminContext.newPage(), student = await studentContext.newPage(), errors = [];
+  const admin = await adminContext.newPage(), student = await studentContext.newPage(), errors = [], externalVideoIssues = [];
+  const youtubeRequests = new Map([[admin, []], [student, []]]);
+  let youtubePlayback = {attempted:false,playbackVerified:false,status:'not-attempted'};
   let active = admin;
-  for (const page of [admin, student]) {page.setDefaultTimeout(25000); page.on('pageerror', error => errors.push(error.message));}
+  const externalVideoHost = value => {try {return /(^|\.)(youtube(?:-nocookie)?\.com|googlevideo\.com|ytimg\.com)$/.test(new URL(value).hostname);} catch {return false;}};
+  for (const page of [admin, student]) {
+    page.setDefaultTimeout(25000);
+    page.on('pageerror', error => {
+      if (/https:\/\/(?:[^/]+\.)?(?:youtube(?:-nocookie)?\.com|googlevideo\.com|ytimg\.com)\//.test(error.stack || '')) externalVideoIssues.push({type:'script',message:error.message});
+      else errors.push(error.message);
+    });
+    page.on('requestfailed', request => {if (externalVideoHost(request.url())) externalVideoIssues.push({type:'network',url:request.url(),error:request.failure()?.errorText});});
+    page.on('response', response => {if (externalVideoHost(response.url()) && response.status() >= 400) externalVideoIssues.push({type:'http',url:response.url(),status:response.status()});});
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.hostname === 'www.youtube-nocookie.com' && url.pathname.startsWith('/embed/')) {
+        youtubeRequests.get(page).push(request.allHeaders().then(headers => ({url:request.url(),referer:headers.referer})).catch(error => ({url:request.url(),error:error.message})));
+      }
+    });
+  }
   const title = 'Actividad multimedia y respuestas ' + Date.now();
+  const youtubeId = 'M7lc1UVf-VE', youtubeTitle = 'Video de orientación en YouTube QA';
   const prompt = '¿Qué actividad te gustaría explorar y por qué?';
   const answer = 'Me gustaría explorar la ciencia y la tecnología para aprender cómo resolver problemas de mi comunidad.';
   const worksheetTitle = 'Dinámica: ¿Quién soy?';
@@ -44,6 +62,95 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     await page.waitForURL(isAdmin ? '**/admin' : '**/mi-ruta');
   };
   const state = async context => {const response = await context.request.get(base + '/api/training'); assert.equal(response.status(), 200); return response.json();};
+  const checkYouTube = async (scope, message, page) => {
+    const frame = scope.locator('.rv-youtube-card iframe');
+    assert.equal(await frame.count(), 1, message + ': exactly one embedded video');
+    assert.equal(await frame.getAttribute('title'), youtubeTitle);
+    const source = new URL(await frame.getAttribute('src'));
+    assert.equal(source.protocol, 'https:'); assert.equal(source.hostname, 'www.youtube-nocookie.com');
+    assert.equal(source.pathname, '/embed/' + youtubeId);
+    assert.equal(await frame.getAttribute('referrerpolicy'), 'strict-origin-when-cross-origin');
+    await frame.scrollIntoViewIfNeeded();
+    const until = Date.now() + 15000;
+    while (!youtubeRequests.get(page).length && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 50));
+    const requests = await Promise.all(youtubeRequests.get(page));
+    assert(requests.length > 0, message + ': CSP permits the embedded YouTube request');
+    assert(requests.some(request => request.referer === new URL(base).origin + '/'), message + ': iframe referrer policy overrides the global no-referrer header');
+    const link = scope.getByRole('link', {name: 'Abrir en YouTube: ' + youtubeTitle, exact: true});
+    const destination = new URL(await link.getAttribute('href'));
+    assert.equal(destination.hostname, 'www.youtube.com'); assert.equal(destination.searchParams.get('v'), youtubeId);
+    assert.equal(await link.getAttribute('target'), '_blank');
+    assert((await link.getAttribute('rel')).includes('noopener'));
+  };
+  const probeYouTubePlayback = async page => {
+    const started = Date.now(), until = started + 30000;
+    const remaining = () => Math.max(1, until - Date.now());
+    const iframe = page.locator('.rv-youtube-card iframe');
+    let playerFrame;
+    youtubePlayback = {attempted:true,playbackVerified:false,status:'loading',timeLimitMs:30000};
+    const inspect = async () => {
+      if (!playerFrame) return;
+      const observed = await playerFrame.evaluate(() => {
+        const video = document.querySelector('video'), player = document.getElementById('movie_player');
+        const providerError = [...document.querySelectorAll('.ytp-error-content-wrap,.ytp-error')].find(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden' && element.textContent?.trim());
+        let playerState = null;
+        try {if (typeof player?.getPlayerState === 'function') playerState = player.getPlayerState();} catch {}
+        return {
+          frameUrl:location.href,readyState:document.readyState,
+          bodyText:(document.body?.innerText || '').slice(0,4000),
+          playerError:(providerError?.textContent || '').trim().slice(0,2000),
+          playerState,
+          video:video ? {currentTime:video.currentTime,paused:video.paused,readyState:video.readyState,networkState:video.networkState,error:video.error ? {code:video.error.code,message:video.error.message} : null} : null,
+          buttons:[...document.querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.title || button.textContent?.trim()).filter(Boolean).slice(0,20),
+        };
+      }).catch(error => ({inspectionError:error.message}));
+      Object.assign(youtubePlayback, observed);
+    };
+    try {
+      await iframe.scrollIntoViewIfNeeded({timeout:remaining()});
+      playerFrame = await (await iframe.elementHandle({timeout:remaining()})).contentFrame();
+      assert(playerFrame, 'The YouTube iframe exposes a browser frame');
+      await playerFrame.waitForFunction(() => location.hostname.endsWith('youtube-nocookie.com') && !!document.body &&
+        (document.body.innerText.trim().length > 0 || !!document.querySelector('video,#movie_player')), null, {timeout:remaining()});
+      await playerFrame.locator('body').waitFor({state:'visible',timeout:remaining()});
+      youtubePlayback.status = 'player-loaded';
+      await inspect();
+      if (youtubePlayback.playerError) {
+        youtubePlayback.status = 'provider-error';
+      } else {
+        const controls = playerFrame.locator('.ytp-large-play-button,.ytp-play-button,button[aria-label="Play"],button[aria-label="Reproducir"]');
+        let played = false;
+        for (const control of await controls.all()) {
+          if (await control.isVisible()) {
+            await control.click({timeout:remaining()});
+            played = true; youtubePlayback.playClicked = true; break;
+          }
+        }
+        if (!played) {
+          await playerFrame.getByRole('button', {name:/^(?:Play|Reproducir)(?:$| video|\s*\()/i}).first().click({timeout:remaining()});
+          youtubePlayback.playClicked = true;
+        }
+        await playerFrame.waitForFunction(() => {
+          const video = document.querySelector('video');
+          return !!video && video.currentTime > 0.1 && !video.paused || [...document.querySelectorAll('.ytp-error-content-wrap,.ytp-error')].some(element => element.getClientRects().length && getComputedStyle(element).visibility !== 'hidden' && element.textContent?.trim());
+        }, null, {timeout:remaining()});
+        await inspect();
+        youtubePlayback.playbackVerified = !!youtubePlayback.video && youtubePlayback.video.currentTime > 0.1 && !youtubePlayback.video.paused;
+        youtubePlayback.status = youtubePlayback.playbackVerified ? 'playing' : youtubePlayback.playerError ? 'provider-error' : 'playback-unverified';
+      }
+    } catch (error) {
+      youtubePlayback.status = 'playback-unverified';
+      youtubePlayback.error = error.message;
+      await inspect();
+      if (youtubePlayback.playerError) youtubePlayback.status = 'provider-error';
+    } finally {
+      youtubePlayback.elapsedMs = Date.now() - started;
+      await iframe.screenshot({path:resolve(folder,'activities-youtube-player.png'),timeout:2000}).catch(error => {youtubePlayback.screenshotError=error.message;});
+      if (playerFrame) await playerFrame.evaluate(() => {document.querySelector('video')?.pause();}).catch(() => {});
+      console.log((youtubePlayback.playbackVerified ? 'PASS' : 'UNVERIFIED') + ' YouTube playback: ' + JSON.stringify(youtubePlayback));
+      writeFileSync(resolve(folder,'activities-youtube-playback.json'),JSON.stringify(youtubePlayback,null,2));
+    }
+  };
   const reader = student.getByRole('region', {name: 'Curso en progreso', exact: true});
   const focusedReader = async () => {
     await reader.waitFor();
@@ -73,6 +180,22 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     assert.equal(await admin.locator('.rv-media-card').count(), 2);
     await admin.waitForFunction(() => document.querySelector('.rv-media-preview img')?.naturalWidth > 0);
     await admin.waitForFunction(() => Number.isFinite(document.querySelector('.rv-media-preview video')?.duration) && document.querySelector('.rv-media-preview video').duration > 0);
+    const youtubeInput = admin.getByLabel('Enlace de YouTube', {exact: true});
+    const addYouTube = admin.getByRole('button', {name: 'Añadir video de YouTube', exact: true});
+    await youtubeInput.fill('https://example.test/watch?v=' + youtubeId);
+    await addYouTube.click();
+    await admin.getByText('Introduce un enlace válido de YouTube (youtube.com o youtu.be).', {exact: true}).waitFor();
+    assert.equal(await admin.locator('.rv-youtube-card iframe').count(), 0, 'An invalid external address never becomes an iframe');
+    await youtubeInput.fill('https://youtu.be/' + youtubeId);
+    await admin.getByLabel('Título del video (opcional)', {exact: true}).fill(youtubeTitle);
+    await addYouTube.click();
+    await admin.getByText('Video añadido. Guarda el borrador para conservarlo o publica el curso para compartirlo.', {exact: true}).waitFor();
+    await checkYouTube(admin, 'Administrator preview', admin);
+    await probeYouTubePlayback(admin);
+    await youtubeInput.fill('https://www.youtube.com/watch?v=' + youtubeId);
+    await addYouTube.click();
+    await admin.getByText('Este video ya está añadido a la actividad.', {exact: true}).waitFor();
+    assert.equal(await admin.locator('.rv-youtube-card iframe').count(), 1, 'Different YouTube URL formats do not duplicate the same video');
     await admin.getByRole('button', {name: 'Añadir actividad', exact: true}).click();
     await admin.locator('.training-module').last().locator('summary').click();
     await admin.getByLabel('Título de actividad', {exact: true}).last().fill(worksheetTitle);
@@ -85,16 +208,21 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     assert.equal(await admin.getByLabel('Pregunta o consigna de reflexión (opcional)', {exact: true}).first().inputValue(), prompt);
     assert.equal(await admin.getByLabel('Explica qué debe hacer el estudiante', {exact: true}).last().inputValue(), worksheet, 'Imported source content is preserved when saving and reloading');
     assert.equal(await admin.locator('.rv-media-card').count(), 2, 'Uploaded materials survive saving and reloading the administrator editor');
+    await checkYouTube(admin, 'Saved administrator course', admin);
     await shot(admin, 'activities-admin-materials');
     await admin.setViewportSize({width: 375, height: 812}); await shot(admin, 'activities-admin-materials-mobile');
     await admin.setViewportSize({width: 1440, height: 1000});
     await admin.getByRole('button', {name: 'Revisar y publicar curso', exact: true}).click();
+    await admin.getByText('Ver contenido', {exact: true}).first().click();
+    await checkYouTube(admin, 'Review before publication', admin);
+    await shot(admin, 'activities-admin-publication-review');
     await admin.getByRole('button', {name: 'Publicar curso', exact: true}).click();
     await admin.getByText('Curso publicado correctamente. Sus actividades ya están disponibles para los estudiantes de esta ruta.', {exact: true}).waitFor();
     await admin.getByRole('button', {name: 'Publicar curso', exact: true}).waitFor({state: 'hidden'});
     await admin.getByRole('heading', {name: title, exact: true}).waitFor();
     const course = (await state(adminContext)).courses.find(course => course.title === title);
     assert.equal(course.status, 'published'); assert.equal(course.activities[0].attachments.length, 2); assert.equal(course.activities.length, 2);
+    assert.deepEqual(course.activities[0].youtubeVideos, [{videoId: youtubeId, title: youtubeTitle}], 'The published course retains the validated video ID and custom title');
 
     active = student;
     await student.goto(base + '/mi-ruta/cursos?curso=' + course.id);
@@ -108,6 +236,7 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     await courseCard.getByRole('button', {name: 'Comenzar curso', exact: true}).click();
     await focusedReader();
     await student.waitForURL(url => url.searchParams.get('curso') === course.id && url.searchParams.get('actividad') === course.activities[0].id);
+    await checkYouTube(reader, 'Student enrolled activity', student);
     const response = student.getByRole('textbox', {name: prompt, exact: true});
     await response.waitFor();
     await student.getByRole('button', {name: 'Completar actividad', exact: true}).click();
@@ -126,6 +255,7 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     await student.reload();
     await focusedReader();
     await response.waitFor(); assert.equal(await response.inputValue(), answer, 'Draft response survives a full browser reload');
+    await checkYouTube(reader, 'Student reload', student);
     await student.getByRole('button', {name: 'Completar actividad', exact: true}).click();
     await student.getByText('Actividad completada. Tu progreso está guardado.', {exact: true}).waitFor();
     await student.reload();
@@ -145,7 +275,7 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     const continueActivity = dashboardCourse.getByRole('link', {name: 'Continuar actividad: ' + worksheetTitle, exact: true});
     await continueActivity.waitFor();
     assert.equal(new URL(await continueActivity.getAttribute('href'), base).searchParams.get('actividad'), course.activities[1].id, 'The dashboard points to the pending activity');
-    assert((await dashboardCourse.innerText()).includes('1 video') && (await dashboardCourse.innerText()).includes('1 imagen'), 'The dashboard reflects the course materials uploaded by the administrator');
+    assert((await dashboardCourse.innerText()).includes('2 videos') && (await dashboardCourse.innerText()).includes('1 imagen'), 'The dashboard counts both the uploaded video and the YouTube video');
     await shot(student, 'activities-dashboard-pending-desktop');
     await student.setViewportSize({width: 375, height: 812}); await shot(student, 'activities-dashboard-pending-mobile');
     await student.setViewportSize({width: 1440, height: 1000});
@@ -195,10 +325,11 @@ export async function runTrainingActivitiesVisual({base, password, folder}) {
     await shot(admin, 'activities-admin-response-review');
     await admin.setViewportSize({width: 375, height: 812}); await shot(admin, 'activities-admin-response-review-mobile');
     assert.deepEqual(errors, [], 'No client JavaScript errors across the administrator/student flow');
-    console.log('PASS browser activities: image/video upload and playback, publication, dashboard deep links and materials, focused reader, unique imported questions, inline validation, autosave/reload, protected delivery, full course progress and administrator review at 375px/1440px.');
+    console.log('PASS browser activities: image/video upload and local playback, YouTube URL validation/deduplication, persisted secure embeds in review and student reader, publication, dashboard deep links and material counts, focused reader, unique imported questions, inline validation, autosave/reload, protected delivery, full course progress and administrator review at 375px/1440px.');
+    console.log('YouTube playback: ' + (youtubePlayback.playbackVerified ? 'verified by a running video with currentTime > 0.1 inside the real embedded player' : 'UNVERIFIED — ' + youtubePlayback.status + '; see activities-youtube-playback.json and activities-youtube-player.png') + '. External video diagnostics: ' + externalVideoIssues.length + '.');
   } catch (error) {
     await active.screenshot({path: resolve(folder, 'activities-failure.png'), fullPage: true}).catch(() => {});
     writeFileSync(resolve(folder, 'activities-failure.txt'), await active.locator('body').innerText().catch(() => ''));
     throw error;
-  } finally {await browser.close();}
+  } finally {writeFileSync(resolve(folder, 'activities-youtube-diagnostics.json'), JSON.stringify({playbackVerified:youtubePlayback.playbackVerified,playback:youtubePlayback,issues:externalVideoIssues}, null, 2)); await browser.close();}
 }
