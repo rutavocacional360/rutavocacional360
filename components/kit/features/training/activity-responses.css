@@ -1,0 +1,148 @@
+.activity-response-form {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.activity-response-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.activity-response-heading h4 {
+  margin: 0 0 6px;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.activity-response-heading p {
+  margin: 0;
+  font-size: .875rem;
+  color: var(--muted);
+}
+.activity-response-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: .75rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.activity-response-count.is-complete {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.activity-response-fields {
+  display: grid;
+  gap: 20px;
+}
+.activity-response-question { min-width: 0; }
+.activity-response-question label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: .9375rem;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.activity-response-question label > span:last-child { padding-top: 2px; }
+.activity-response-question label small {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: .75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.activity-response-number {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--muted);
+  font-size: .8125rem;
+}
+.activity-response-number.is-answered { color: var(--primary); background: var(--primary-soft); }
+.activity-response-question textarea {
+  display: block;
+  width: 100%;
+  min-height: 104px;
+  max-height: 280px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.6;
+  resize: vertical;
+  scroll-margin-block: 100px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.activity-response-question textarea::placeholder { color: var(--muted); opacity: .85; }
+.activity-response-question textarea:focus {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary-soft);
+  outline-offset: 2px;
+}
+.activity-response-question textarea[readonly] { background: var(--canvas); }
+.activity-response-question.has-error textarea { border-color: var(--danger); }
+.activity-response-question .activity-response-field-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: .8125rem;
+}
+.activity-response-characters { display: block; text-align: right; margin-top: 6px; font-size: .75rem; }
+.activity-response-footer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.activity-response-save-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .8125rem;
+  min-height: 44px;
+}
+.activity-response-save-state[data-saved="true"] { color: var(--teal); }
+.activity-response-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.activity-response-actions .button { min-height: 44px; padding: 10px 15px; font-size: .875rem; }
+.activity-response-form .activity-response-hint,
+.activity-response-form .activity-response-privacy {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+.activity-response-form .activity-response-privacy { font-size: .75rem; }
+.activity-response-form .notice > div { display: grid; gap: 12px; min-width: 0; }
+.activity-response-form .notice .button { justify-self: start; white-space: normal; text-align: left; }
+@media (max-width: 900px) {
+  .activity-response-footer { grid-template-columns: 1fr; gap: 12px; }
+  .activity-response-save-state { min-height: 24px; }
+}
+@media (max-width: 520px) {
+  .activity-response-form { gap: 18px; }
+  .activity-response-heading { gap: 10px; }
+  .activity-response-actions { display: grid; grid-template-columns: 1fr; }
+  .activity-response-actions .button { width: 100%; }
+  .activity-response-actions .button--primary { order: -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-response-question textarea { transition: none; }
+}

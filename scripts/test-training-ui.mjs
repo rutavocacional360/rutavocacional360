@@ -160,10 +160,10 @@ globalThis.__trainingApi=async(path,body)=>{
  if(path==='/start')return {id:'course-exam-attempt',mode:body.mode};
  assert.fail('Unexpected course request '+path);
 };
-function Reader(){
+function Reader({requestedCourseId='',requestedActivityId=''}={}){
  const [data,setData]=React.useState(fixture);
  const run=async task=>{const result=await task();fixture={...fixture,enrollments:[saved]};setData(fixture);return result;};
- return React.createElement(StudentCoursePrograms,{data,level:'universidad',career:'',busy:false,run,onStartSimulator:attempt=>{simulatorStarted=attempt;}});
+ return React.createElement(StudentCoursePrograms,{data,level:'universidad',career:'',busy:false,run,requestedCourseId,requestedActivityId,onStartSimulator:attempt=>{simulatorStarted=attempt;}});
 }
 const button=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text);
 const click=async text=>React.act(async()=>{const target=button(text);assert(target,'Missing course control '+text);assert(!target.disabled,'Course control disabled: '+text);target.click();});
@@ -172,13 +172,13 @@ try{
  assert(document.body.textContent.includes('1 de 4 actividades completadas'),'The course card uses the enrolled snapshot, not the one-activity new version');
  await click('Continuar curso');
  assert.equal(requests[0].path,'/enroll');assert(document.body.textContent.includes('Programa matriculado'));
- assert.equal(document.querySelector('h3').textContent,'Reflexión guardada','Continuation opens the next unfinished saved activity');
+ assert.equal(document.querySelector('.course-activity-header h2').textContent,'Reflexión guardada','Continuation opens the next unfinished saved activity');
  assert.equal(document.querySelector('.training-lesson').textContent,hostile,'The complete source is displayed as plain text');
  assert.equal(document.querySelector('.training-lesson img,.training-lesson script'),null,'Document markup must never execute as HTML');
  assert.equal(window.documentAttack,undefined);
  assert(!document.body.textContent.includes('Contenido de la nueva versión'));
  assert(document.querySelector('textarea'),'Reading activities expose a response field');
- await click('Guardar y completar actividad');
+ await click('Completar actividad');
  assert.deepEqual(requests.at(-1),{path:'/activity-response',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-two',answers:{},revision:0,complete:true}});
  assert(document.body.textContent.includes('2 de 4 actividades completadas'));assert(document.body.textContent.includes('Tu progreso está guardado'));
  assert.equal(document.querySelector('progress').getAttribute('value'),'2');assert.equal(document.querySelector('progress').getAttribute('max'),'4');
@@ -186,18 +186,45 @@ try{
  const link=document.querySelector('a');assert.equal(link.getAttribute('href'),'https://example.test/material');assert.equal(link.getAttribute('rel'),'noopener noreferrer');
  await click('Siguiente actividad');
  assert.equal(button('Siguiente actividad').disabled,true,'The final activity has no next action');
- assert(!button('Guardar y completar actividad'),'Simulator activities cannot be completed as readings');
+ assert(!button('Completar actividad'),'Simulator activities cannot be completed as readings');
  await click('Iniciar examen de la actividad');
  assert.deepEqual(requests.at(-1),{path:'/start',body:{enrollmentId:'enrollment-snapshot',activityId:'saved-exam',mode:'exam'}},'A historical exam-only simulator uses the enrolled version modes, not its newer practice-only publication');
  assert.equal(simulatorStarted.id,'course-exam-attempt');
  await click('Volver a mis cursos');await click('Continuar curso');
- assert.equal(document.querySelector('h3').textContent,'Material externo','Reopening continues from the persisted next incomplete activity');
+ assert.equal(document.querySelector('.course-activity-header h2').textContent,'Material externo','Reopening continues from the persisted next incomplete activity');
  saved={...saved,next:snapshot.activities[3],activityModes:{'saved-exam':[]}};
  fixture={...fixture,enrollments:[saved]};
  await React.act(async()=>root.render(React.createElement(Reader,{key:'unavailable-simulator'})));
  await click('Continuar curso');
  assert(document.body.textContent.includes('El simulador de esta actividad no está disponible'));
  assert.equal(button('Iniciar práctica de la actividad').disabled,true,'An unavailable historical simulator must not guess a mode from another version');
+ fixture={...fixture,courses:[],enrollments:[saved]};
+ const beforeDeepLink=requests.length;
+ await React.act(async()=>root.render(React.createElement(Reader,{key:'deep-link',requestedCourseId:published.id,requestedActivityId:'saved-link'})));
+ assert.equal(document.querySelector('.course-activity-header h2').textContent,'Material externo','Dashboard links and reloads open the exact enrolled activity, even after a course is archived');
+ assert.equal(requests.length,beforeDeepLink,'Opening an existing enrollment is read-only');
+ saved={...saved,next:null,completed:['saved-one','saved-two','saved-link'],snapshot:{...snapshot,activities:snapshot.activities.map(a=>({...a,required:a.id!=='saved-exam'}))}};
+ fixture={...fixture,courses:[published],enrollments:[saved]};
+ await React.act(async()=>root.render(React.createElement(Reader,{key:'optional-activity'})));
+ await click('Continuar curso');
+ assert.equal(document.querySelector('.course-activity-header h2').textContent,'Evaluación del curso','Continue opens an optional pending activity when all required work is finished');
+ globalThis.__trainingProfile={stage:'Me gradué del colegio'};
+ globalThis.__trainingQuery='curso='+published.id+'&actividad=saved-link';
+ globalThis.__trainingFixture={...fixture,attempts:[],recommendations:[],readiness:{universidad:readiness(true),bachillerato:readiness(false)}};
+ const focusedReader=renderToStaticMarkup(React.createElement(StudentCourses));
+ assert(focusedReader.includes('Curso en progreso')&&focusedReader.includes('Material externo'));
+ assert(!focusedReader.includes('Buscar opción de estudio')&&!focusedReader.includes('Historial de notas')&&!focusedReader.includes('Todavía no hay preparación relacionada'),'The open activity is a dedicated workspace without a second catalog/history below it');
+ globalThis.__trainingFixture={...globalThis.__trainingFixture,enrollments:[]};
+ const coursePreview=renderToStaticMarkup(React.createElement(StudentCourses));
+ assert(coursePreview.includes('Vista previa del curso')&&coursePreview.includes('Programa actualizado')&&coursePreview.includes('Comenzar curso'),'An unenrolled course deep link shows its own introduction before enrollment');
+ assert(!coursePreview.includes('Historial de notas')&&!coursePreview.includes('Curso en progreso'),'Preview is focused and does not pretend the user is enrolled');
+ const previewProps={data:globalThis.__trainingFixture,level:'universidad',career:'',requestedCourseId:published.id,run:async task=>task(),onStartSimulator(){}};
+ await React.act(async()=>root.render(React.createElement(StudentCoursePrograms,{...previewProps,key:'preview-busy',busy:true})));
+ assert.equal(button('Volver a mis cursos').disabled,true,'A pending enrollment blocks leaving the preview before the response can reopen it');
+ assert.equal(button('Comenzar curso').disabled,true,'A pending enrollment cannot be submitted twice');
+ await React.act(async()=>root.render(React.createElement(StudentCoursePrograms,{...previewProps,key:'preview-busy',busy:false})));
+ assert.equal(button('Volver a mis cursos').disabled,false,'Preview navigation is restored after the enrollment request settles');
+ for(const key of ['__trainingProfile','__trainingQuery','__trainingFixture'])delete globalThis[key];
  console.log('PASS course reader DOM: snapshot continuation/progress, original activity IDs, full escaped source, external link safety, navigation and exam-only course simulator.');
 }finally{
  await React.act(async()=>root.unmount());

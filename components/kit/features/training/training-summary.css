@@ -1,0 +1,46 @@
+.learning-summary { display: grid; gap: 20px; min-width: 0; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+.learning-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.learning-summary-heading > div { min-width: 0; }
+.learning-summary-heading h2 { margin: 6px 0; font-size: 22px; }
+.learning-summary p { margin: 0; color: var(--muted); line-height: 1.6; }
+.learning-summary > .button { justify-self: start; }
+.learning-summary .button { min-height: 44px; white-space: normal; text-align: center; }
+.learning-summary-heading > .button { flex-shrink: 0; }
+.learning-summary-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.learning-summary-stats > div { display: flex; flex-direction: column; gap: 6px; padding: 16px 20px; }
+.learning-summary-stats > div + div { border-left: 1px solid var(--border); }
+.learning-summary-stats dt { font-size: 13px; color: var(--muted); }
+.learning-summary-stats dd { order: -1; margin: 0; font-size: 26px; line-height: 1.2; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.learning-summary-courses { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; }
+.learning-summary-course { display: flex; flex-direction: column; min-width: 0; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 14px; }
+.learning-summary-course-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.learning-summary-icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 42px; height: 42px; background: var(--primary-soft); color: var(--primary); border-radius: 12px; }
+.learning-summary-course h3 { margin: 0; color: var(--ink); font-size: 17px; line-height: 1.5; overflow-wrap: anywhere; }
+.learning-summary-course-next { display: grid; gap: 4px; font-size: 14px; overflow-wrap: anywhere; }
+.learning-summary-course-next strong { color: var(--ink); font-size: 12px; font-weight: 600; }
+.learning-summary-course-progress { display: grid; gap: 8px; margin-top: auto; font-size: 12px; color: var(--muted); }
+.learning-summary-course-progress progress { width: 100%; height: 7px; accent-color: var(--primary); border: 0; border-radius: 99px; overflow: hidden; }
+.learning-summary-course-progress progress::-webkit-progress-bar { background: var(--primary-soft); }
+.learning-summary-course-progress progress::-webkit-progress-value { background: var(--primary); border-radius: 99px; }
+.learning-summary-materials { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0; padding: 0; list-style: none; }
+.learning-summary-materials li { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
+.learning-summary-course > .button { justify-content: space-between; gap: 10px; }
+.learning-summary-more { font-size: 13px; }
+.learning-summary-more a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.learning-summary-practice { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+.learning-summary-practice strong { color: var(--ink); }
+.learning-summary-practice p { margin-top: 4px; font-size: 13px; }
+.learning-summary-practice .button { flex-shrink: 0; }
+.learning-summary-empty { display: flex; align-items: flex-start; gap: 16px; padding: 20px; border-radius: 12px; background: var(--primary-soft); }
+.learning-summary-empty > svg { flex-shrink: 0; color: var(--primary); }
+.learning-summary-empty h3 { margin: 0 0 6px; font-size: 17px; }
+.learning-summary-empty p { max-width: 70ch; font-size: 14px; }
+@media (max-width: 700px) {
+  .learning-summary { padding: 18px; }
+  .learning-summary-heading, .learning-summary-practice { align-items: stretch; flex-direction: column; gap: 14px; }
+  .learning-summary-heading > .button, .learning-summary-practice > .button { align-self: flex-start; }
+  .learning-summary-stats > div { padding: 14px 10px; }
+  .learning-summary-stats dd { font-size: 23px; }
+  .learning-summary-stats dt { font-size: 12px; line-height: 1.5; }
+  .learning-summary-course { padding: 16px; }
+}

@@ -97,7 +97,14 @@ export function CourseEditor({
   data: any;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const patch = (v: Partial<Course>) => change({ ...c, ...v });
+  const latestCourse = useRef(c);
+  latestCourse.current = c;
+  const uploadingActivities = useRef(new Set<string>());
+  const patch = (v: Partial<Course>) => {
+    const next = { ...latestCourse.current, ...v };
+    latestCourse.current = next;
+    change(next);
+  };
   return (
     <div className="training-editor">
       <Field
@@ -163,8 +170,8 @@ export function CourseEditor({
       {c.activities.map((a, i) => {
         const update = (v: any) =>
           patch({
-            activities: c.activities.map((x, j) =>
-              i === j ? { ...x, ...v } : x,
+            activities: latestCourse.current.activities.map((x) =>
+              a.id === x.id ? { ...x, ...v } : x,
             ),
           });
         return (
@@ -286,24 +293,37 @@ export function CourseEditor({
                 )}
               </>
             ) : (
+              <section className="activity-authoring-section">
+              <h4>1. Contenido e instrucciones</h4>
               <TextareaField
+                className="activity-content-field"
                 label={
                   a.kind === "text"
-                    ? "Contenido de la lección"
+                    ? "Explica qué debe hacer el estudiante"
                     : "URL HTTPS del recurso"
                 }
                 value={a.content}
                 onChange={(e) => update({ content: e.target.value })}
+                placeholder={a.kind === "text" ? "Presenta la actividad con instrucciones breves y claras. Añade tus materiales debajo." : "https://…"}
+                hint={a.kind === "text" ? "No necesitas líneas de puntos ni espacios para escribir: las respuestas tendrán sus propios campos." : "También puedes subir el documento directamente en Materiales de la actividad."}
               />
+              </section>
             )}
-            {a.kind !== "simulator" && <TextareaField
-              label="Pregunta o reflexión para responder (opcional)"
+            {a.kind !== "simulator" && <section className="activity-authoring-section">
+              <h4>2. Respuesta del estudiante</h4>
+              <TextareaField
+              className="activity-prompt-field"
+              label="Pregunta o consigna de reflexión (opcional)"
               value={a.responsePrompt || ""}
               onChange={event => update({responsePrompt: event.target.value})}
-              placeholder="Si la lección ya incluye preguntas, también se mostrarán al estudiante."
-            />}
-            <ActivityMediaEditor attachments={a.attachments} onChange={attachments => update({attachments})} onBusyChange={onBusyChange}/>
-            <label>
+              placeholder="¿Qué descubriste sobre ti en esta actividad?"
+              hint="Esta consigna tendrá un campo de respuesta. Para varias respuestas separadas, deja esto vacío y escribe las preguntas con ¿…? en el contenido: cada una tendrá su propio campo."
+            /></section>}
+            <ActivityMediaEditor attachments={a.attachments} onChange={attachments => update({attachments})} onBusyChange={busy => {
+              if (busy) uploadingActivities.current.add(a.id); else uploadingActivities.current.delete(a.id);
+              onBusyChange?.(uploadingActivities.current.size > 0);
+            }}/>
+            <label className="activity-authoring-required">
               <input
                 type="checkbox"
                 checked={a.required}

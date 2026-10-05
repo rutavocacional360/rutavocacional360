@@ -326,8 +326,8 @@ export function CompactDashboard() {
           />
         </div>
       </Card>
-      {last&&<Card className="stack"><span className="eyebrow">{level==='bachillerato'?'TU RUTA DE BACHILLERATO':'TU RUTA UNIVERSITARIA'}</span><h2>{level==='bachillerato'?last.analysis?.pathway?.title||'Tu orientación de bachillerato':'Tus carreras universitarias recomendadas'}</h2><p>{level==='bachillerato'?last.analysis?.pathway?.reason||'Compara Ciencias y las figuras profesionales técnicas relacionadas con tus respuestas.':last.analysis?.summary||'Explora las carreras relacionadas con tus intereses y habilidades.'}</p><Link className="button button--primary" href="/mi-ruta/resultados">Ver sugerencias y recomendaciones</Link></Card>}
       <TrainingSummary />
+      {last&&<Card className="stack"><span className="eyebrow">{level==='bachillerato'?'TU RUTA DE BACHILLERATO':'TU RUTA UNIVERSITARIA'}</span><h2>{level==='bachillerato'?last.analysis?.pathway?.title||'Tu orientación de bachillerato':'Tus carreras universitarias recomendadas'}</h2><p>{level==='bachillerato'?last.analysis?.pathway?.reason||'Compara Ciencias y las figuras profesionales técnicas relacionadas con tus respuestas.':last.analysis?.summary||'Explora las carreras relacionadas con tus intereses y habilidades.'}</p><Link className="button button--primary" href="/mi-ruta/resultados">Ver sugerencias y recomendaciones</Link></Card>}
       <section className="compact-section">
         <div className="section-title">
           <h2>Tu evaluación</h2>

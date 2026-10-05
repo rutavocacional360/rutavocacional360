@@ -114,6 +114,13 @@ Si otra sesión guarda o entrega la actividad, el formulario abierto se actualiz
 Cuando hay texto local pendiente, se conserva y se avisa del conflicto para
 recuperar lo guardado sin sobrescribir silenciosamente ninguna entrega.
 
+El lector muestra las instrucciones y un campo por pregunta, sin repetir las
+preguntas ni las líneas de puntos del documento importado. El guardado automático
+indica su estado; «Completar actividad» señala las respuestas pendientes. Los
+enlaces del inicio abren directamente el curso y la actividad, y una recarga
+conserva ese lugar. El panel resume avances y materiales de las matrículas,
+incluidos los cursos archivados cuyo contenido ya comenzó el estudiante.
+
 El editor de actividades admite imágenes JPG, PNG, WebP y GIF; videos MP4 y
 WebM; audio MP3, WAV, OGG y M4A; y documentos PDF, DOCX, PPTX, XLSX, TXT y
 CSV. Cada actividad admite hasta 12 archivos: 20 MB por imagen o documento y
@@ -123,6 +130,13 @@ Sus referencias se guardan en la base de datos y los archivos en almacenamiento
 privado persistente. `TRAINING_MEDIA_PATH` permite indicar una ruta absoluta;
 si se omite, se usa `training-media` junto al directorio `IMPORT_PATH`. Incluye
 esa carpeta en las copias de seguridad junto con la base de datos.
+
+La carga administrativa admite selección múltiple o arrastre, muestra el progreso
+real de cada archivo y permite reintentar solo los fallidos. Los archivos ya
+cargados y las ediciones actuales se conservan; guardar y publicar esperan a que
+termine la carga. Para varias respuestas, deja vacía la consigna única y escribe
+las preguntas con signos de interrogación en las instrucciones. Los videos,
+imágenes y audios tienen vista previa; todos los materiales pueden descargarse.
 
 Después de compilar, `npm run test:integration` comprueba publicación, respuestas,
 matrículas, permisos y materiales por HTTP en una instalación aislada.

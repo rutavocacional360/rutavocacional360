@@ -16,6 +16,24 @@ export function activityResponsePrompts(activity: Activity) {
   return [{ id: 'response', prompt: 'Tu respuesta o reflexión sobre la actividad', required: false }];
 }
 
+/** Display imported worksheets as instructions plus answer fields, rather than
+ * showing their questions and printable answer lines a second time. This is a
+ * presentation-only transformation: response IDs and enrolled content stay intact. */
+export function activityInstructionText(activity: Activity) {
+  if (activity.kind !== 'text') return activity.content;
+  const explicit = activity.responsePrompt?.trim();
+  let content = activity.content;
+  if (!explicit) content = content.replace(/¿[^¿?]+\?/g, '');
+  else content = content.replaceAll(explicit, '');
+  const lines = content
+    .replace(/(?:[.\u2026_·][\t ]*){4,}/g, '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line && !/^(?:\d+\s*[.)\-:]|[a-z]\s*[.)]|[•\-–—_\s]+)$/i.test(line));
+  const section = /^(?:inicio|desarrollo|cierre|preguntas|responde(?: las siguientes preguntas)?|actividad)\s*:?$/i;
+  return lines.filter((line, index) => !section.test(line) || (index + 1 < lines.length && !section.test(lines[index + 1]))).join('\n').trim();
+}
+
 export function activityResponseProblem(activity: Activity, answers: unknown, complete = false) {
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) return 'Respuestas de la actividad inválidas.';
   const prompts = activityResponsePrompts(activity);

@@ -37,7 +37,7 @@ export async function runAdminCourseCrudVisual({base,password,folder}) {
       await page.getByLabel('Objetivos de aprendizaje',{exact:true}).fill('Reconocer intereses y registrar una reflexión.');
       await page.getByRole('button',{name:'Añadir actividad',exact:true}).click();
       await page.getByLabel('Título de actividad',{exact:true}).fill('Reflexión inicial');
-      await page.getByLabel('Contenido de la lección',{exact:true}).fill('Describe un interés personal y una actividad para explorarlo.');
+      await page.getByLabel('Explica qué debe hacer el estudiante',{exact:true}).fill('Describe un interés personal y una actividad para explorarlo.');
       await page.getByRole('button',{name:'Guardar borrador',exact:true}).click();
       await page.getByText('Borrador del curso guardado correctamente.',{exact:true}).waitFor();
       await page.waitForURL(url=>!!url.searchParams.get('editar')&&url.searchParams.get('version')==='1');
@@ -50,7 +50,7 @@ export async function runAdminCourseCrudVisual({base,password,folder}) {
       const course=(await catalog()).courses.find(c=>c.title===title);assert.equal(course.status,'published');assert.equal(course.educationLevel,level);
       const card=page.locator('.test-manager-card').filter({has:page.getByRole('heading',{name:title,exact:true})});
       await card.getByRole('button',{name:'Editar curso',exact:true}).click();
-      await page.getByLabel('Contenido de la lección',{exact:true}).fill('Contenido revisado que debe persistir sin crear tarjetas repetidas.');
+      await page.getByLabel('Explica qué debe hacer el estudiante',{exact:true}).fill('Contenido revisado que debe persistir sin crear tarjetas repetidas.');
       await page.getByRole('button',{name:'Guardar borrador',exact:true}).click();
       await page.getByText('Borrador del curso guardado correctamente.',{exact:true}).waitFor();
       await page.getByRole('button',{name:'Salir sin guardar',exact:true}).click();

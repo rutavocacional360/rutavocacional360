@@ -18,7 +18,7 @@ const fixtures={
  export function Notice({tone,...props}){return React.createElement('div',props)}
  export const Card=Notice;`,
  session:`export const previewAction=async()=>({careers:[]});`,
- requests:`export const adminFetch=(...args)=>globalThis.__adminAIRequest(...args);`,
+ requests:`export const adminFetch=(...args)=>globalThis.__adminAIRequest(...args);export async function refreshAdminAccess(){throw Error('Unexpected media session refresh in AI test');}export async function renewAdminSession(){throw Error('Unexpected media login in AI test');}`,
  shared:`export function ChoiceList(){return null;}export const trainingApi=async()=>({});`,
 };
 await build({stdin:{contents:`export {CompleteTestDraft} from './components/kit/features/admin/CompleteTestDraft';export {testEditorIssues} from './components/kit/features/admin/test-editor-issues';export {StudyOptionSuggestions} from './components/kit/features/admin/StudyOptionSuggestions';export {PresentationEditor} from './components/kit/components/domain/PresentationEditor';export {SimulatorEditor,blankSimulator} from './components/kit/features/training/TrainingEditors';`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'node',format:'cjs',packages:'external',jsx:'automatic',outfile,loader:{'.css':'empty'},plugins:[{name:'controlled-browser',setup(b){

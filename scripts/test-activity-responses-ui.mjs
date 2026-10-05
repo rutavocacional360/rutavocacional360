@@ -40,7 +40,16 @@ const click=async text=>React.act(async()=>{const button=[...document.querySelec
 const autosave=async()=>{assert.equal(timers.size,1);const fn=[...timers.values()][0];timers.clear();await React.act(async()=>fn());};
 try {
  await mount('initial');assert.equal(document.querySelectorAll('textarea').length,2);
+ const emptyFields=[...document.querySelectorAll('textarea')];
+ assert(emptyFields.every(field=>field.getAttribute('rows')==='3'),'Answer fields start compact and grow with the student text');
+ assert(emptyFields.every(field=>document.querySelector(`label[for="${field.id}"]`)),'Every numbered question labels its editable answer');
+ let focused;emptyFields[0].focus=()=>{focused=emptyFields[0].id;};
+ await click('Completar actividad');assert.equal(requests.length,0,'Empty completion never calls the API');
+ assert.equal(document.querySelectorAll('textarea[aria-invalid="true"]').length,2,'A completion attempt explains the missing answers inline');
+ assert.equal(focused,emptyFields[0].id,'The first unanswered question receives focus');
  await type(0,'Aprender ciencias');assert(pending);assert.equal(storage.size,1);
+ assert.equal(document.querySelectorAll('textarea[aria-invalid="true"]').length,1,'Validation clears as each missing answer is filled');
+ assert(document.body.textContent.includes('1 de 2 respondidas'),'The answer count helps students see what remains');
  // Navigating with Next unmounts without beforeunload; the tab-local draft survives.
  await mount('navigation');assert.equal(renderedValue(0),'Aprender ciencias');assert.equal(requests.length,0);
  await autosave();assert.equal(saved.answers['question-1'],'Aprender ciencias');assert.equal(storage.size,0);assert(!pending);
@@ -50,10 +59,13 @@ try {
  await mount('reload');assert.equal(renderedValue(0),'Respuesta en otro dispositivo','A clean open form adopts newer server answers without requiring navigation');
  failure=true;await type(0,'Nuevo borrador');await autosave();
  assert(document.body.textContent.includes('Sin conexión QA'));assert.equal(timers.size,0,'Network failures never cause endless automatic retries');assert(storage.size);
- failure=false;await click('Guardar respuestas');assert.equal(saved.answers['question-1'],'Nuevo borrador');assert.equal(storage.size,0);
+ assert(!document.body.textContent.includes('descartar estos cambios'),'A connection failure offers a retry without suggesting data loss');
+ failure=false;await click('Reintentar guardado');assert.equal(saved.answers['question-1'],'Nuevo borrador');assert.equal(storage.size,0);
  await type(0,'Texto de pestaña antigua');saved={...saved,revision:saved.revision+1,answers:{...saved.answers,'question-1':'Cambio desde otra sesión'}};
  await mount('conflict');assert(document.body.textContent.includes('respuestas más recientes'));assert.equal(renderedValue(0),'Texto de pestaña antigua');
  assert.equal(timers.size,0,'A restored stale draft never overwrites a newer database revision');
+ await type(0,'Texto que sigo preparando ante un conflicto');assert.equal(timers.size,0,'Typing during a revision conflict keeps the draft local until recovery');
+ assert.equal(JSON.parse([...storage.values()][0]).answers['question-1'],'Texto que sigo preparando ante un conflicto');
  await click('Recuperar guardado y descartar estos cambios');assert.equal(renderedValue(0),'Cambio desde otra sesión');assert.equal(storage.size,0);
  await type(0,'Borrador local mientras llega una actualización');
  saved={...saved,revision:saved.revision+1,answers:{...saved.answers,'question-1':'Actualización remota mientras escribía'}};
@@ -61,9 +73,9 @@ try {
  assert(document.body.textContent.includes('respuestas más recientes'),'An incoming revision surfaces the conflict without losing local text');
  assert.equal(timers.size,0,'A background refresh stops stale autosave before it is sent');
  await click('Recuperar guardado y descartar estos cambios');assert.equal(renderedValue(0),'Actualización remota mientras escribía');
- await click('Guardar y completar actividad');assert(saved.submittedAt);assert.equal(storage.size,0);
+ await click('Completar actividad');assert(saved.submittedAt);assert.equal(storage.size,0);
  assert([...document.querySelectorAll('textarea')].every(field=>field[Object.keys(field).find(key=>key.startsWith('__reactProps$'))].readOnly));
- assert(![...document.querySelectorAll('button')].some(button=>button.textContent==='Guardar y completar actividad'));
+ assert(![...document.querySelectorAll('button')].some(button=>button.textContent==='Completar actividad'));
  // A request from a departed form must not clear the new form's local typing.
  saved=undefined;requests=[];
  const immediateApi=globalThis.__activityApi;let release;
@@ -86,7 +98,7 @@ try {
  assert([...document.querySelectorAll('button')].filter(button=>button.textContent.startsWith('Guardar')).every(button=>button.disabled),'Save and submission wait for the enrollment mutation to finish');
  assert.equal(timers.size,0,'Autosave waits instead of calling the parent mutation while it is occupied');
  parentBusy=false;await mount('opening-course');assert.equal(timers.size,1,'Autosave resumes when the parent releases its mutation');
- await click('Guardar y completar actividad');assert(saved.submittedAt);assert.equal(saved.answers['question-2'],'Respuesta durante la carga');
+ await click('Completar actividad');assert(saved.submittedAt);assert.equal(saved.answers['question-2'],'Respuesta durante la carga');
  console.log('PASS activity response DOM: editable imported questions, autosave, reload/navigation drafts, explicit retry, stale revision protection, recovery and submitted answers.');
 } finally {
  await React.act(async()=>root.unmount());globalThis.setTimeout=originalTimeout;globalThis.clearTimeout=originalClearTimeout;delete globalThis.__activityApi;
